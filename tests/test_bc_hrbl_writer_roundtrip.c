@@ -59,7 +59,7 @@ static void test_writer_roundtrip_empty(void** state)
     free(json);
     bc_hrbl_reader_destroy(reader_again);
 
-    free(buffer);
+    bc_hrbl_free_buffer(memory, buffer);
     bc_allocators_context_destroy(memory);
 }
 
@@ -119,7 +119,7 @@ static void test_writer_roundtrip_scalars(void** state)
     assert_true(loaded_float > 3.13 && loaded_float < 3.15);
 
     bc_hrbl_reader_destroy(reader);
-    free(buffer);
+    bc_hrbl_free_buffer(memory, buffer);
     bc_allocators_context_destroy(memory);
 }
 
@@ -203,7 +203,7 @@ static void test_writer_roundtrip_nested(void** state)
     free(json);
 
     bc_hrbl_reader_destroy(reader);
-    free(buffer);
+    bc_hrbl_free_buffer(memory, buffer);
     bc_allocators_context_destroy(memory);
 }
 

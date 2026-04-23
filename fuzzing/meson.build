@@ -10,6 +10,9 @@ endif
 fuzz_targets = [
     'bc_hrbl_verify',
     'bc_hrbl_convert_json',
+    'bc_hrbl_reader_open',
+    'bc_hrbl_export',
+    'bc_hrbl_writer',
 ]
 
 foreach name : fuzz_targets

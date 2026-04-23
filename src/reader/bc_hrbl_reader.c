@@ -64,7 +64,7 @@ static bool bc_hrbl_reader_header_layout_valid(const bc_hrbl_header_t* header, s
 static bool bc_hrbl_reader_footer_matches(const uint8_t* base, const bc_hrbl_header_t* header)
 {
     bc_hrbl_footer_t footer;
-    memcpy(&footer, base + header->footer_offset, sizeof(footer));
+    (void)bc_core_copy(&footer, base + header->footer_offset, sizeof(footer));
     if (footer.magic_end != BC_HRBL_MAGIC) {
         return false;
     }
@@ -177,7 +177,7 @@ static bool bc_hrbl_reader_read_entry(const bc_hrbl_reader_t* reader, uint64_t e
     if (entry_offset + BC_HRBL_ROOT_ENTRY_SIZE > reader->size) {
         return false;
     }
-    memcpy(out_entry, &reader->base[entry_offset], sizeof(*out_entry));
+    (void)bc_core_copy(out_entry, &reader->base[entry_offset], sizeof(*out_entry));
     return true;
 }
 
@@ -194,7 +194,9 @@ static bool bc_hrbl_reader_key_equals(const bc_hrbl_reader_t* reader, const bc_h
     if (pool_offset + key_length > reader->size) {
         return false;
     }
-    return memcmp(&reader->base[pool_offset], key_data, key_length) == 0;
+    bool equal = false;
+    (void)bc_core_equal(&reader->base[pool_offset], key_data, key_length, &equal);
+    return equal;
 }
 
 static bool bc_hrbl_reader_linear_probe_range(const bc_hrbl_reader_t* reader, uint64_t entries_start, uint64_t entry_count,
@@ -343,7 +345,7 @@ bool bc_hrbl_reader_block_body_offsets(const bc_hrbl_reader_t* reader, uint64_t 
     if (body_offset + sizeof(bc_hrbl_block_header_t) > reader->size) {
         return false;
     }
-    memcpy(out_header, &reader->base[body_offset], sizeof(*out_header));
+    (void)bc_core_copy(out_header, &reader->base[body_offset], sizeof(*out_header));
     *out_entries_offset = body_offset + sizeof(bc_hrbl_block_header_t);
     if (*out_entries_offset + (uint64_t)out_header->child_count * BC_HRBL_BLOCK_ENTRY_SIZE > reader->size) {
         return false;
@@ -422,7 +424,7 @@ bool bc_hrbl_reader_array_body_offsets(const bc_hrbl_reader_t* reader, uint64_t 
     if (body_offset + sizeof(bc_hrbl_array_header_t) > reader->size) {
         return false;
     }
-    memcpy(out_header, &reader->base[body_offset], sizeof(*out_header));
+    (void)bc_core_copy(out_header, &reader->base[body_offset], sizeof(*out_header));
     *out_elements_offset = body_offset + sizeof(bc_hrbl_array_header_t);
     if (*out_elements_offset + (uint64_t)out_header->element_count * BC_HRBL_ARRAY_ELEMENT_SIZE > reader->size) {
         return false;
@@ -453,7 +455,7 @@ bool bc_hrbl_reader_array_at_offset(const bc_hrbl_reader_t* reader, uint64_t arr
     }
     uint64_t location = elements_offset + (uint64_t)index * BC_HRBL_ARRAY_ELEMENT_SIZE;
     uint64_t value_offset = 0u;
-    memcpy(&value_offset, &reader->base[location], sizeof(value_offset));
+    (void)bc_core_copy(&value_offset, &reader->base[location], sizeof(value_offset));
     *out_value_offset = value_offset;
     return true;
 }
@@ -484,7 +486,7 @@ bool bc_hrbl_reader_scalar_int64_at(const bc_hrbl_reader_t* reader, uint64_t val
     if (!bc_hrbl_reader_scalar_body(reader, value_offset, BC_HRBL_KIND_INT64, &body_offset)) {
         return false;
     }
-    memcpy(out_value, &reader->base[body_offset], sizeof(*out_value));
+    (void)bc_core_copy(out_value, &reader->base[body_offset], sizeof(*out_value));
     return true;
 }
 
@@ -494,7 +496,7 @@ bool bc_hrbl_reader_scalar_uint64_at(const bc_hrbl_reader_t* reader, uint64_t va
     if (!bc_hrbl_reader_scalar_body(reader, value_offset, BC_HRBL_KIND_UINT64, &body_offset)) {
         return false;
     }
-    memcpy(out_value, &reader->base[body_offset], sizeof(*out_value));
+    (void)bc_core_copy(out_value, &reader->base[body_offset], sizeof(*out_value));
     return true;
 }
 
@@ -504,7 +506,7 @@ bool bc_hrbl_reader_scalar_float64_at(const bc_hrbl_reader_t* reader, uint64_t v
     if (!bc_hrbl_reader_scalar_body(reader, value_offset, BC_HRBL_KIND_FLOAT64, &body_offset)) {
         return false;
     }
-    memcpy(out_value, &reader->base[body_offset], sizeof(*out_value));
+    (void)bc_core_copy(out_value, &reader->base[body_offset], sizeof(*out_value));
     return true;
 }
 
@@ -532,7 +534,7 @@ bool bc_hrbl_reader_scalar_string_at(const bc_hrbl_reader_t* reader, uint64_t va
         return false;
     }
     bc_hrbl_string_ref_t ref;
-    memcpy(&ref, &reader->base[body_offset], sizeof(ref));
+    (void)bc_core_copy(&ref, &reader->base[body_offset], sizeof(ref));
     size_t absolute = (size_t)ref.pool_offset + sizeof(uint32_t);
     if (absolute + (size_t)ref.length > reader->size) {
         return false;
@@ -576,7 +578,7 @@ bool bc_hrbl_reader_resolve_path(const bc_hrbl_reader_t* reader, const char* pat
             if (number_length == 0u || number_length >= sizeof(number_buffer)) {
                 return false;
             }
-            memcpy(number_buffer, &path[cursor + 1u], number_length);
+            (void)bc_core_copy(number_buffer, &path[cursor + 1u], number_length);
             number_buffer[number_length] = '\0';
             char* end_ptr = NULL;
             unsigned long long index = strtoull(number_buffer, &end_ptr, 10);
@@ -635,7 +637,7 @@ static void bc_hrbl_value_ref_fill(bc_hrbl_value_ref_t* ref, const bc_hrbl_reade
 bool bc_hrbl_reader_find(const bc_hrbl_reader_t* reader, const char* path, size_t path_length, bc_hrbl_value_ref_t* out_value)
 {
     if (out_value != NULL) {
-        memset(out_value, 0, sizeof(*out_value));
+        (void)bc_core_zero(out_value, sizeof(*out_value));
     }
     if (reader == NULL || path == NULL || out_value == NULL) {
         return false;
@@ -725,7 +727,7 @@ bool bc_hrbl_reader_get_string(const bc_hrbl_value_ref_t* value, const char** ou
 bool bc_hrbl_reader_iter_block(const bc_hrbl_value_ref_t* block, bc_hrbl_iter_t* out_iter)
 {
     if (out_iter != NULL) {
-        memset(out_iter, 0, sizeof(*out_iter));
+        (void)bc_core_zero(out_iter, sizeof(*out_iter));
     }
     if (block == NULL || block->reader == NULL || out_iter == NULL) {
         return false;
@@ -749,7 +751,7 @@ bool bc_hrbl_reader_iter_block(const bc_hrbl_value_ref_t* block, bc_hrbl_iter_t*
 bool bc_hrbl_reader_iter_array(const bc_hrbl_value_ref_t* array, bc_hrbl_iter_t* out_iter)
 {
     if (out_iter != NULL) {
-        memset(out_iter, 0, sizeof(*out_iter));
+        (void)bc_core_zero(out_iter, sizeof(*out_iter));
     }
     if (array == NULL || array->reader == NULL || out_iter == NULL) {
         return false;
@@ -773,7 +775,7 @@ bool bc_hrbl_reader_iter_array(const bc_hrbl_value_ref_t* array, bc_hrbl_iter_t*
 bool bc_hrbl_iter_next(bc_hrbl_iter_t* iter, bc_hrbl_value_ref_t* out_value, const char** out_key, size_t* out_key_length)
 {
     if (out_value != NULL) {
-        memset(out_value, 0, sizeof(*out_value));
+        (void)bc_core_zero(out_value, sizeof(*out_value));
     }
     if (out_key != NULL) {
         *out_key = NULL;
@@ -813,7 +815,7 @@ bool bc_hrbl_iter_next(bc_hrbl_iter_t* iter, bc_hrbl_value_ref_t* out_value, con
         if (iter->cursor_offset + sizeof(value_offset) > iter->reader->size) {
             return false;
         }
-        memcpy(&value_offset, &iter->reader->base[iter->cursor_offset], sizeof(value_offset));
+        (void)bc_core_copy(&value_offset, &iter->reader->base[iter->cursor_offset], sizeof(value_offset));
         bc_hrbl_kind_t kind;
         if (!bc_hrbl_reader_kind_at(iter->reader, value_offset, &kind)) {
             return false;

@@ -5,6 +5,11 @@
 #include "bc_hrbl_reader_internal.h"
 #include "bc_hrbl_format_internal.h"
 
+#include "bc_allocators.h"
+#include "bc_allocators_pool.h"
+#include "bc_core.h"
+#include "bc_core_memory.h"
+
 #include <inttypes.h>
 #include <math.h>
 #include <stdbool.h>
@@ -16,6 +21,23 @@
 
 #include <yaml.h>
 
+
+static void* bc_hrbl_export_scratch_alloc(bc_allocators_context_t* memory_context, size_t bytes)
+{
+    void* pointer = NULL;
+    if (!bc_allocators_pool_allocate(memory_context, bytes, &pointer)) {
+        return NULL;
+    }
+    return pointer;
+}
+
+static void bc_hrbl_export_scratch_free(bc_allocators_context_t* memory_context, void* pointer)
+{
+    if (pointer == NULL) {
+        return;
+    }
+    bc_allocators_pool_free(memory_context, pointer);
+}
 typedef struct bc_hrbl_yaml_state {
     FILE*                           stream;
     const bc_hrbl_reader_t*         reader;
@@ -123,7 +145,8 @@ static int bc_hrbl_yaml_sort_by_key(const void* left, const void* right, void* c
     size_t a_length = (size_t)a->key_length;
     size_t b_length = (size_t)b->key_length;
     size_t min_length = a_length < b_length ? a_length : b_length;
-    int cmp = memcmp(a_data, b_data, min_length);
+    int cmp = 0;
+    (void)bc_core_compare(a_data, b_data, min_length, &cmp);
     if (cmp != 0) {
         return cmp;
     }
@@ -152,14 +175,14 @@ static bool bc_hrbl_yaml_emit_block(bc_hrbl_yaml_state_t* state, uint64_t block_
     bool sort_keys = state->options != NULL ? state->options->sort_keys : true;
     bc_hrbl_yaml_sort_entry_t* entries = NULL;
     if (header.child_count != 0u) {
-        entries = (bc_hrbl_yaml_sort_entry_t*)malloc((size_t)header.child_count * sizeof(*entries));
+        entries = (bc_hrbl_yaml_sort_entry_t*)bc_hrbl_export_scratch_alloc(state->reader->memory_context, (size_t)header.child_count * sizeof(*entries));
         if (entries == NULL) {
             state->failed = true;
             return false;
         }
         for (uint32_t i = 0u; i < header.child_count; i += 1u) {
             bc_hrbl_entry_t raw;
-            memcpy(&raw, &state->reader->base[entries_offset + (uint64_t)i * BC_HRBL_BLOCK_ENTRY_SIZE], sizeof(raw));
+            (void)bc_core_copy(&raw, &state->reader->base[entries_offset + (uint64_t)i * BC_HRBL_BLOCK_ENTRY_SIZE], sizeof(raw));
             entries[i].key_pool_offset = raw.key_pool_offset;
             entries[i].key_length = raw.key_length;
             entries[i].value_offset = raw.value_offset;
@@ -171,15 +194,15 @@ static bool bc_hrbl_yaml_emit_block(bc_hrbl_yaml_state_t* state, uint64_t block_
     for (uint32_t i = 0u; i < header.child_count; i += 1u) {
         const char* key_data = (const char*)&state->reader->base[(size_t)entries[i].key_pool_offset + sizeof(uint32_t)];
         if (!bc_hrbl_yaml_emit_scalar_double_quoted(state, key_data, (size_t)entries[i].key_length)) {
-            free(entries);
+            bc_hrbl_export_scratch_free(state->reader->memory_context, entries);
             return false;
         }
         if (!bc_hrbl_yaml_emit_value(state, entries[i].value_offset)) {
-            free(entries);
+            bc_hrbl_export_scratch_free(state->reader->memory_context, entries);
             return false;
         }
     }
-    free(entries);
+    bc_hrbl_export_scratch_free(state->reader->memory_context, entries);
     return bc_hrbl_yaml_emit_mapping_end(state);
 }
 
@@ -196,7 +219,7 @@ static bool bc_hrbl_yaml_emit_array(bc_hrbl_yaml_state_t* state, uint64_t array_
     }
     for (uint32_t i = 0u; i < header.element_count; i += 1u) {
         uint64_t value_offset = 0u;
-        memcpy(&value_offset, &state->reader->base[elements_offset + (uint64_t)i * BC_HRBL_ARRAY_ELEMENT_SIZE],
+        (void)bc_core_copy(&value_offset, &state->reader->base[elements_offset + (uint64_t)i * BC_HRBL_ARRAY_ELEMENT_SIZE],
                sizeof(value_offset));
         if (!bc_hrbl_yaml_emit_value(state, value_offset)) {
             return false;
@@ -334,14 +357,14 @@ bool bc_hrbl_export_yaml_ex(const bc_hrbl_reader_t* reader, FILE* stream, const 
         }
     } else {
         bool sort_keys = options != NULL ? options->sort_keys : true;
-        bc_hrbl_yaml_sort_entry_t* entries = (bc_hrbl_yaml_sort_entry_t*)malloc((size_t)root_count * sizeof(*entries));
+        bc_hrbl_yaml_sort_entry_t* entries = (bc_hrbl_yaml_sort_entry_t*)bc_hrbl_export_scratch_alloc(reader->memory_context, (size_t)root_count * sizeof(*entries));
         if (entries == NULL) {
             yaml_emitter_delete(&state.emitter);
             return false;
         }
         for (uint64_t i = 0u; i < root_count; i += 1u) {
             bc_hrbl_entry_t raw;
-            memcpy(&raw, &reader->base[reader->header->root_index_offset + i * BC_HRBL_ROOT_ENTRY_SIZE], sizeof(raw));
+            (void)bc_core_copy(&raw, &reader->base[reader->header->root_index_offset + i * BC_HRBL_ROOT_ENTRY_SIZE], sizeof(raw));
             entries[i].key_pool_offset = raw.key_pool_offset;
             entries[i].key_length = raw.key_length;
             entries[i].value_offset = raw.value_offset;
@@ -350,7 +373,7 @@ bool bc_hrbl_export_yaml_ex(const bc_hrbl_reader_t* reader, FILE* stream, const 
             qsort_r(entries, (size_t)root_count, sizeof(*entries), bc_hrbl_yaml_sort_by_key, (void*)reader);
         }
         if (!bc_hrbl_yaml_emit_mapping_start(&state)) {
-            free(entries);
+            bc_hrbl_export_scratch_free(reader->memory_context, entries);
             yaml_emitter_delete(&state.emitter);
             return false;
         }
@@ -365,7 +388,7 @@ bool bc_hrbl_export_yaml_ex(const bc_hrbl_reader_t* reader, FILE* stream, const 
                 break;
             }
         }
-        free(entries);
+        bc_hrbl_export_scratch_free(reader->memory_context, entries);
         if (!bc_hrbl_yaml_emit_mapping_end(&state)) {
             ok = false;
         }

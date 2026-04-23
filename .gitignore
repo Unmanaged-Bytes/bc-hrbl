@@ -11,3 +11,6 @@ debian/files
 debian/*.substvars
 debian/debhelper-build-stamp
 debian/libbc-hrbl-dev/
+fuzzing/crashes/
+fuzzing/corpus/*/*
+!fuzzing/corpus/*/seed_*

@@ -46,4 +46,6 @@ bool bc_hrbl_writer_append_string(bc_hrbl_writer_t* writer, const char* value, s
 bool bc_hrbl_writer_finalize_to_file(bc_hrbl_writer_t* writer, const char* output_path);
 bool bc_hrbl_writer_finalize_to_buffer(bc_hrbl_writer_t* writer, void** out_buffer, size_t* out_size);
 
+void bc_hrbl_free_buffer(bc_allocators_context_t* memory_context, void* buffer);
+
 #endif

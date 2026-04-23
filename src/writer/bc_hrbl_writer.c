@@ -13,8 +13,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <stdint.h>
-#include <stdlib.h>
-#include <string.h>
+#include <stddef.h>
 #include <sys/stat.h>
 #include <unistd.h>
 
@@ -30,7 +29,7 @@ static bool bc_hrbl_writer_arena_clone(bc_hrbl_writer_t* writer, const void* dat
     if (!bc_allocators_arena_allocate(writer->arena, length, 1u, &pointer)) {
         return false;
     }
-    memcpy(pointer, data, length);
+    (void)bc_core_copy(pointer, data, length);
     *out = pointer;
     return true;
 }
@@ -43,7 +42,7 @@ static bc_hrbl_writer_node_t* bc_hrbl_writer_alloc_node(bc_hrbl_writer_t* writer
         return NULL;
     }
     bc_hrbl_writer_node_t* node = (bc_hrbl_writer_node_t*)pointer;
-    memset(node, 0, sizeof(*node));
+    (void)bc_core_zero(node, sizeof(*node));
     node->cached_key_pool_offset = BC_HRBL_WRITER_POOL_OFFSET_NONE;
     node->cached_string_pool_offset = BC_HRBL_WRITER_STRING_OFFSET_NONE;
     return node;
@@ -131,7 +130,7 @@ bool bc_hrbl_writer_create_ex(bc_allocators_context_t* memory_context, const bc_
         return false;
     }
     bc_hrbl_writer_t* writer = (bc_hrbl_writer_t*)pointer;
-    memset(writer, 0, sizeof(*writer));
+    (void)bc_core_zero(writer, sizeof(*writer));
     writer->memory_context = memory_context;
     if (!bc_allocators_arena_create_growable(memory_context, (size_t)256 * 1024, 0u, &writer->arena)) {
         bc_allocators_pool_free(memory_context, writer);
@@ -433,7 +432,7 @@ bool bc_hrbl_writer_finalize_to_file(bc_hrbl_writer_t* writer, const char* outpu
     }
     int file_descriptor = open(output_path, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0644);
     if (file_descriptor < 0) {
-        free(buffer);
+        bc_allocators_pool_free(writer->memory_context, buffer);
         return false;
     }
     size_t written_total = 0u;
@@ -444,12 +443,20 @@ bool bc_hrbl_writer_finalize_to_file(bc_hrbl_writer_t* writer, const char* outpu
                 continue;
             }
             close(file_descriptor);
-            free(buffer);
+            bc_allocators_pool_free(writer->memory_context, buffer);
             return false;
         }
         written_total += (size_t)n;
     }
     int close_result = close(file_descriptor);
-    free(buffer);
+    bc_allocators_pool_free(writer->memory_context, buffer);
     return close_result == 0;
+}
+
+void bc_hrbl_free_buffer(bc_allocators_context_t* memory_context, void* buffer)
+{
+    if (buffer == NULL) {
+        return;
+    }
+    bc_allocators_pool_free(memory_context, buffer);
 }

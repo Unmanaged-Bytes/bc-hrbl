@@ -5,6 +5,11 @@
 #include "bc_hrbl_reader_internal.h"
 #include "bc_hrbl_format_internal.h"
 
+#include "bc_allocators.h"
+#include "bc_allocators_pool.h"
+#include "bc_core.h"
+#include "bc_core_memory.h"
+
 #include <inttypes.h>
 #include <math.h>
 #include <stdbool.h>
@@ -14,6 +19,23 @@
 #include <stdlib.h>
 #include <string.h>
 
+
+static void* bc_hrbl_export_scratch_alloc(bc_allocators_context_t* memory_context, size_t bytes)
+{
+    void* pointer = NULL;
+    if (!bc_allocators_pool_allocate(memory_context, bytes, &pointer)) {
+        return NULL;
+    }
+    return pointer;
+}
+
+static void bc_hrbl_export_scratch_free(bc_allocators_context_t* memory_context, void* pointer)
+{
+    if (pointer == NULL) {
+        return;
+    }
+    bc_allocators_pool_free(memory_context, pointer);
+}
 typedef struct bc_hrbl_ini_state {
     FILE*                           stream;
     const bc_hrbl_reader_t*         reader;
@@ -163,7 +185,8 @@ static int bc_hrbl_ini_sort_by_key(const void* left, const void* right, void* co
     size_t a_length = (size_t)a->key_length;
     size_t b_length = (size_t)b->key_length;
     size_t min_length = a_length < b_length ? a_length : b_length;
-    int cmp = memcmp(a_data, b_data, min_length);
+    int cmp = 0;
+    (void)bc_core_compare(a_data, b_data, min_length, &cmp);
     if (cmp != 0) {
         return cmp;
     }
@@ -192,21 +215,21 @@ static bool bc_hrbl_ini_emit_entry(bc_hrbl_ini_state_t* state, const char* secti
         if (section_length != 0u) {
             new_section_length += 1u;
         }
-        char* new_section = (char*)malloc(new_section_length + 1u);
+        char* new_section = (char*)bc_hrbl_export_scratch_alloc(state->reader->memory_context, new_section_length + 1u);
         if (new_section == NULL) {
             state->failed = true;
             return false;
         }
         if (section_length != 0u) {
-            memcpy(new_section, section, section_length);
+            (void)bc_core_copy(new_section, section, section_length);
             new_section[section_length] = '.';
-            memcpy(new_section + section_length + 1u, key, key_length);
+            (void)bc_core_copy(new_section + section_length + 1u, key, key_length);
         } else {
-            memcpy(new_section, key, key_length);
+            (void)bc_core_copy(new_section, key, key_length);
         }
         new_section[new_section_length] = '\0';
         bool ok = bc_hrbl_ini_emit_block(state, new_section, new_section_length, value_offset, false);
-        free(new_section);
+        bc_hrbl_export_scratch_free(state->reader->memory_context, new_section);
         return ok;
     }
     if (kind == BC_HRBL_KIND_ARRAY) {
@@ -218,7 +241,7 @@ static bool bc_hrbl_ini_emit_entry(bc_hrbl_ini_state_t* state, const char* secti
         }
         for (uint32_t i = 0u; i < header.element_count; i += 1u) {
             uint64_t element_offset = 0u;
-            memcpy(&element_offset, &state->reader->base[elements_offset + (uint64_t)i * BC_HRBL_ARRAY_ELEMENT_SIZE],
+            (void)bc_core_copy(&element_offset, &state->reader->base[elements_offset + (uint64_t)i * BC_HRBL_ARRAY_ELEMENT_SIZE],
                    sizeof(element_offset));
             bc_hrbl_kind_t element_kind;
             if (!bc_hrbl_reader_kind_at(state->reader, element_offset, &element_kind)) {
@@ -269,14 +292,14 @@ static bool bc_hrbl_ini_emit_block(bc_hrbl_ini_state_t* state, const char* secti
     bool sort_keys = state->options != NULL ? state->options->sort_keys : true;
     bc_hrbl_ini_sort_entry_t* entries = NULL;
     if (header.child_count != 0u) {
-        entries = (bc_hrbl_ini_sort_entry_t*)malloc((size_t)header.child_count * sizeof(*entries));
+        entries = (bc_hrbl_ini_sort_entry_t*)bc_hrbl_export_scratch_alloc(state->reader->memory_context, (size_t)header.child_count * sizeof(*entries));
         if (entries == NULL) {
             state->failed = true;
             return false;
         }
         for (uint32_t i = 0u; i < header.child_count; i += 1u) {
             bc_hrbl_entry_t raw;
-            memcpy(&raw, &state->reader->base[entries_offset + (uint64_t)i * BC_HRBL_BLOCK_ENTRY_SIZE], sizeof(raw));
+            (void)bc_core_copy(&raw, &state->reader->base[entries_offset + (uint64_t)i * BC_HRBL_BLOCK_ENTRY_SIZE], sizeof(raw));
             entries[i].key_pool_offset = raw.key_pool_offset;
             entries[i].key_length = raw.key_length;
             entries[i].value_offset = raw.value_offset;
@@ -288,15 +311,15 @@ static bool bc_hrbl_ini_emit_block(bc_hrbl_ini_state_t* state, const char* secti
 
     if (!is_root && section_length != 0u) {
         if (!bc_hrbl_ini_write_literal(state, "[")) {
-            free(entries);
+            bc_hrbl_export_scratch_free(state->reader->memory_context, entries);
             return false;
         }
         if (!bc_hrbl_ini_write(state, section, section_length)) {
-            free(entries);
+            bc_hrbl_export_scratch_free(state->reader->memory_context, entries);
             return false;
         }
         if (!bc_hrbl_ini_write_literal(state, "]\n")) {
-            free(entries);
+            bc_hrbl_export_scratch_free(state->reader->memory_context, entries);
             return false;
         }
     }
@@ -306,16 +329,16 @@ static bool bc_hrbl_ini_emit_block(bc_hrbl_ini_state_t* state, const char* secti
     for (uint32_t i = 0u; i < header.child_count; i += 1u) {
         bc_hrbl_kind_t kind;
         if (!bc_hrbl_reader_kind_at(state->reader, entries[i].value_offset, &kind)) {
-            free(entries);
+            bc_hrbl_export_scratch_free(state->reader->memory_context, entries);
             state->failed = true;
             return false;
         }
         const char* key_data = (const char*)&state->reader->base[(size_t)entries[i].key_pool_offset + sizeof(uint32_t)];
         if (kind == BC_HRBL_KIND_BLOCK) {
             if (blocks_to_emit == NULL) {
-                blocks_to_emit = (bc_hrbl_ini_sort_entry_t*)malloc((size_t)header.child_count * sizeof(*blocks_to_emit));
+                blocks_to_emit = (bc_hrbl_ini_sort_entry_t*)bc_hrbl_export_scratch_alloc(state->reader->memory_context, (size_t)header.child_count * sizeof(*blocks_to_emit));
                 if (blocks_to_emit == NULL) {
-                    free(entries);
+                    bc_hrbl_export_scratch_free(state->reader->memory_context, entries);
                     state->failed = true;
                     return false;
                 }
@@ -326,27 +349,27 @@ static bool bc_hrbl_ini_emit_block(bc_hrbl_ini_state_t* state, const char* secti
         }
         if (!bc_hrbl_ini_emit_entry(state, section, section_length, key_data, (size_t)entries[i].key_length,
                                     entries[i].value_offset)) {
-            free(entries);
-            free(blocks_to_emit);
+            bc_hrbl_export_scratch_free(state->reader->memory_context, entries);
+            bc_hrbl_export_scratch_free(state->reader->memory_context, blocks_to_emit);
             return false;
         }
     }
-    free(entries);
+    bc_hrbl_export_scratch_free(state->reader->memory_context, entries);
     if (blocks_count != 0u) {
         if (!bc_hrbl_ini_write_literal(state, "\n")) {
-            free(blocks_to_emit);
+            bc_hrbl_export_scratch_free(state->reader->memory_context, blocks_to_emit);
             return false;
         }
         for (size_t i = 0u; i < blocks_count; i += 1u) {
             const char* key_data = (const char*)&state->reader->base[(size_t)blocks_to_emit[i].key_pool_offset + sizeof(uint32_t)];
             if (!bc_hrbl_ini_emit_entry(state, section, section_length, key_data, (size_t)blocks_to_emit[i].key_length,
                                         blocks_to_emit[i].value_offset)) {
-                free(blocks_to_emit);
+                bc_hrbl_export_scratch_free(state->reader->memory_context, blocks_to_emit);
                 return false;
             }
         }
     }
-    free(blocks_to_emit);
+    bc_hrbl_export_scratch_free(state->reader->memory_context, blocks_to_emit);
     return true;
 }
 
@@ -372,13 +395,13 @@ bool bc_hrbl_export_ini_ex(const bc_hrbl_reader_t* reader, FILE* stream, const b
     }
 
     bool sort_keys = options != NULL ? options->sort_keys : true;
-    bc_hrbl_ini_sort_entry_t* entries = (bc_hrbl_ini_sort_entry_t*)malloc((size_t)root_count * sizeof(*entries));
+    bc_hrbl_ini_sort_entry_t* entries = (bc_hrbl_ini_sort_entry_t*)bc_hrbl_export_scratch_alloc(reader->memory_context, (size_t)root_count * sizeof(*entries));
     if (entries == NULL) {
         return false;
     }
     for (uint64_t i = 0u; i < root_count; i += 1u) {
         bc_hrbl_entry_t raw;
-        memcpy(&raw, &reader->base[reader->header->root_index_offset + i * BC_HRBL_ROOT_ENTRY_SIZE], sizeof(raw));
+        (void)bc_core_copy(&raw, &reader->base[reader->header->root_index_offset + i * BC_HRBL_ROOT_ENTRY_SIZE], sizeof(raw));
         entries[i].key_pool_offset = raw.key_pool_offset;
         entries[i].key_length = raw.key_length;
         entries[i].value_offset = raw.value_offset;
@@ -398,7 +421,7 @@ bool bc_hrbl_export_ini_ex(const bc_hrbl_reader_t* reader, FILE* stream, const b
         const char* key_data = (const char*)&reader->base[(size_t)entries[i].key_pool_offset + sizeof(uint32_t)];
         if (kind == BC_HRBL_KIND_BLOCK) {
             if (blocks_to_emit == NULL) {
-                blocks_to_emit = (bc_hrbl_ini_sort_entry_t*)malloc((size_t)root_count * sizeof(*blocks_to_emit));
+                blocks_to_emit = (bc_hrbl_ini_sort_entry_t*)bc_hrbl_export_scratch_alloc(reader->memory_context, (size_t)root_count * sizeof(*blocks_to_emit));
                 if (blocks_to_emit == NULL) {
                     state.failed = true;
                     break;
@@ -412,7 +435,7 @@ bool bc_hrbl_export_ini_ex(const bc_hrbl_reader_t* reader, FILE* stream, const b
             break;
         }
     }
-    free(entries);
+    bc_hrbl_export_scratch_free(reader->memory_context, entries);
     for (size_t i = 0u; i < blocks_count && !state.failed; i += 1u) {
         const char* key_data = (const char*)&reader->base[(size_t)blocks_to_emit[i].key_pool_offset + sizeof(uint32_t)];
         if (!bc_hrbl_ini_emit_entry(&state, "", 0u, key_data, (size_t)blocks_to_emit[i].key_length,
@@ -420,6 +443,6 @@ bool bc_hrbl_export_ini_ex(const bc_hrbl_reader_t* reader, FILE* stream, const b
             break;
         }
     }
-    free(blocks_to_emit);
+    bc_hrbl_export_scratch_free(reader->memory_context, blocks_to_emit);
     return !state.failed;
 }

@@ -80,7 +80,7 @@ static void test_yaml_simple(void** state)
     assert_non_null(strstr(yaml, "true"));
     free(yaml);
     bc_hrbl_reader_destroy(reader);
-    free(buffer);
+    bc_hrbl_free_buffer(memory, buffer);
     bc_allocators_context_destroy(memory);
 }
 
@@ -103,7 +103,7 @@ static void test_yaml_nested(void** state)
     assert_non_null(strstr(yaml, "- 443"));
     free(yaml);
     bc_hrbl_reader_destroy(reader);
-    free(buffer);
+    bc_hrbl_free_buffer(memory, buffer);
     bc_allocators_context_destroy(memory);
 }
 
@@ -123,7 +123,7 @@ static void test_ini_simple(void** state)
     assert_non_null(strstr(ini, "tls = true"));
     free(ini);
     bc_hrbl_reader_destroy(reader);
-    free(buffer);
+    bc_hrbl_free_buffer(memory, buffer);
     bc_allocators_context_destroy(memory);
 }
 
@@ -146,7 +146,7 @@ static void test_ini_nested(void** state)
     assert_non_null(strstr(ini, "port = 8080"));
     free(ini);
     bc_hrbl_reader_destroy(reader);
-    free(buffer);
+    bc_hrbl_free_buffer(memory, buffer);
     bc_allocators_context_destroy(memory);
 }
 
