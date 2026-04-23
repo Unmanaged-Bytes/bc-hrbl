@@ -11,3 +11,15 @@ test_bc_hrbl_verify_status = executable('test_bc_hrbl_verify_status',
     dependencies : [cmocka_dep, bc_hrbl_dep],
 )
 test('bc_hrbl_verify_status', test_bc_hrbl_verify_status)
+
+test_bc_hrbl_verify_edge_cases = executable('test_bc_hrbl_verify_edge_cases',
+    'test_bc_hrbl_verify_edge_cases.c',
+    dependencies : [cmocka_dep, bc_hrbl_dep, xxhash_dep],
+)
+test('bc_hrbl_verify_edge_cases', test_bc_hrbl_verify_edge_cases)
+
+test_bc_hrbl_reader_basic = executable('test_bc_hrbl_reader_basic',
+    'test_bc_hrbl_reader_basic.c',
+    dependencies : [cmocka_dep, bc_hrbl_dep, xxhash_dep],
+)
+test('bc_hrbl_reader_basic', test_bc_hrbl_reader_basic)
