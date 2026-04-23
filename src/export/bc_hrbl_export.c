@@ -297,8 +297,7 @@ static int bc_hrbl_export_sort_by_key(const void* left, const void* right, void*
     size_t a_length = (size_t)a->key_length;
     size_t b_length = (size_t)b->key_length;
     size_t min_length = a_length < b_length ? a_length : b_length;
-    int cmp = 0;
-    (void)bc_core_compare(a_data, b_data, min_length, &cmp);
+    int cmp = __builtin_memcmp(a_data, b_data, min_length);
     if (cmp != 0) {
         return cmp;
     }
