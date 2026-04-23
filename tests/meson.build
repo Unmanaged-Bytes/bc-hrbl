@@ -23,3 +23,9 @@ test_bc_hrbl_reader_basic = executable('test_bc_hrbl_reader_basic',
     dependencies : [cmocka_dep, bc_hrbl_dep, xxhash_dep],
 )
 test('bc_hrbl_reader_basic', test_bc_hrbl_reader_basic)
+
+test_bc_hrbl_export_json = executable('test_bc_hrbl_export_json',
+    'test_bc_hrbl_export_json.c',
+    dependencies : [cmocka_dep, bc_hrbl_dep, xxhash_dep],
+)
+test('bc_hrbl_export_json', test_bc_hrbl_export_json)
