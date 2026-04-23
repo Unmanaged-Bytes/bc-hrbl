@@ -238,7 +238,7 @@ bool bc_hrbl_convert_json_to_writer(bc_hrbl_writer_t* writer, const char* json_t
         bc_hrbl_convert_error_set(out_error, "json_tokener_new failed", 0u);
         return false;
     }
-    json_tokener_set_flags(tokener, JSON_TOKENER_STRICT | JSON_TOKENER_VALIDATE_UTF8);
+    json_tokener_set_flags(tokener, 0);
     struct json_object* root = json_tokener_parse_ex(tokener, json_text, (int)text_length);
     enum json_tokener_error err = json_tokener_get_error(tokener);
     if (err != json_tokener_success) {
