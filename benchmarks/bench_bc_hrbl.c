@@ -107,7 +107,7 @@ static void bench_writer(size_t entries)
             best_ns = elapsed;
         }
         output_size = size;
-        free(buffer);
+        bc_hrbl_free_buffer(memory, buffer);
         bc_hrbl_writer_destroy(writer);
     }
     double seconds = (double)best_ns / 1e9;
@@ -161,7 +161,7 @@ static void bench_reader_scan(size_t entries)
     printf("reader_scan    : entries=%zu  size=%zu B (%.2f MiB)  best=%.3f ms  %.2f MB/s   (sink=%" PRId64 ", visited=%" PRIu64 ")\n",
            entries, hrbl_size, mb, seconds * 1000.0, mb / seconds, (int64_t)sink, visited);
     bc_hrbl_reader_destroy(reader);
-    free(hrbl_buffer);
+    bc_hrbl_free_buffer(memory, hrbl_buffer);
     bc_allocators_context_destroy(memory);
 }
 
@@ -204,7 +204,7 @@ static void bench_query_latency(size_t entries)
     printf("query_latency  : entries=%zu  lookups=%" PRIu64 "  median_ns=%.1f   (sink=%" PRId64 ")\n",
            entries, total_ops, ns_per_op, (int64_t)sink);
     bc_hrbl_reader_destroy(reader);
-    free(hrbl_buffer);
+    bc_hrbl_free_buffer(memory, hrbl_buffer);
     bc_allocators_context_destroy(memory);
 }
 
@@ -228,7 +228,7 @@ static void bench_convert_json(size_t entries)
             best_ns = elapsed;
         }
         output_size = size;
-        free(buffer);
+        bc_hrbl_free_buffer(memory, buffer);
     }
     double seconds = (double)best_ns / 1e9;
     double json_mb = (double)json_size / (1024.0 * 1024.0);
@@ -270,7 +270,7 @@ static void bench_export_json(size_t entries)
     printf("hrbl_to_json   : hrbl=%zu B  json=%zu B (%.2f MiB)  best=%.3f ms  %.2f MB/s\n",
            hrbl_size, output_size, mb, seconds * 1000.0, mb / seconds);
     bc_hrbl_reader_destroy(reader);
-    free(hrbl_buffer);
+    bc_hrbl_free_buffer(memory, hrbl_buffer);
     bc_allocators_context_destroy(memory);
 }
 

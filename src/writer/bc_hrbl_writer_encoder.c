@@ -343,23 +343,47 @@ typedef struct bc_hrbl_encoder_pending_entry {
     uint64_t value_offset;
 } bc_hrbl_encoder_pending_entry_t;
 
-static int bc_hrbl_encoder_pending_entry_compare(const void* left, const void* right)
+static bool bc_hrbl_encoder_pending_radix_sort(bc_allocators_context_t* memory_context, bc_hrbl_encoder_pending_entry_t* entries,
+                                               size_t count)
 {
-    const bc_hrbl_encoder_pending_entry_t* a = (const bc_hrbl_encoder_pending_entry_t*)left;
-    const bc_hrbl_encoder_pending_entry_t* b = (const bc_hrbl_encoder_pending_entry_t*)right;
-    if (a->key_hash64 < b->key_hash64) {
-        return -1;
+    void* pointer = NULL;
+    if (!bc_allocators_pool_allocate(memory_context, count * sizeof(bc_hrbl_encoder_pending_entry_t), &pointer)) {
+        return false;
     }
-    if (a->key_hash64 > b->key_hash64) {
-        return 1;
+    bc_hrbl_encoder_pending_entry_t* scratch = (bc_hrbl_encoder_pending_entry_t*)pointer;
+    size_t counts[256];
+    size_t prefix[256];
+    bc_hrbl_encoder_pending_entry_t* src = entries;
+    bc_hrbl_encoder_pending_entry_t* dst = scratch;
+    for (unsigned int pass = 0u; pass < 8u; pass += 1u) {
+        (void)bc_core_zero(counts, sizeof(counts));
+        unsigned int shift = pass * 8u;
+        for (size_t i = 0u; i < count; i += 1u) {
+            unsigned int byte = (unsigned int)((src[i].key_hash64 >> shift) & 0xFFu);
+            counts[byte] += 1u;
+        }
+        prefix[0] = 0u;
+        for (unsigned int i = 1u; i < 256u; i += 1u) {
+            prefix[i] = prefix[i - 1u] + counts[i - 1u];
+        }
+        for (size_t i = 0u; i < count; i += 1u) {
+            unsigned int byte = (unsigned int)((src[i].key_hash64 >> shift) & 0xFFu);
+            dst[prefix[byte]] = src[i];
+            prefix[byte] += 1u;
+        }
+        bc_hrbl_encoder_pending_entry_t* swap = src;
+        src = dst;
+        dst = swap;
     }
-    return 0;
+    bc_allocators_pool_free(memory_context, pointer);
+    return true;
 }
 
-static void bc_hrbl_encoder_pending_sort(bc_hrbl_encoder_pending_entry_t* entries, size_t count)
+static bool bc_hrbl_encoder_pending_sort(bc_allocators_context_t* memory_context, bc_hrbl_encoder_pending_entry_t* entries,
+                                         size_t count)
 {
     if (count < 2u) {
-        return;
+        return true;
     }
     if (count <= 32u) {
         for (size_t i = 1u; i < count; i += 1u) {
@@ -371,9 +395,9 @@ static void bc_hrbl_encoder_pending_sort(bc_hrbl_encoder_pending_entry_t* entrie
             }
             entries[j] = pivot;
         }
-        return;
+        return true;
     }
-    qsort(entries, count, sizeof(*entries), bc_hrbl_encoder_pending_entry_compare);
+    return bc_hrbl_encoder_pending_radix_sort(memory_context, entries, count);
 }
 
 static bool bc_hrbl_encoder_emit_value(bc_hrbl_encoder_buffer_t* nodes, bc_hrbl_encoder_pool_t* pool,
@@ -526,7 +550,12 @@ static bool bc_hrbl_encoder_emit_block(bc_hrbl_encoder_buffer_t* nodes, bc_hrbl_
         index += 1u;
     }
 
-    bc_hrbl_encoder_pending_sort(pending, child_count);
+    if (!bc_hrbl_encoder_pending_sort(pool->memory_context, pending, child_count)) {
+        if (pending != NULL) {
+            bc_allocators_pool_free(pool->memory_context, pending);
+        }
+        return false;
+    }
 
     uint8_t* entries_write = &nodes->data[entries_buffer_offset];
     for (uint32_t i = 0u; i < child_count; i += 1u) {
@@ -791,7 +820,14 @@ bool bc_hrbl_writer_serialize_to_buffer(bc_hrbl_writer_t* writer, uint8_t** out_
         root_index += 1u;
     }
 
-    bc_hrbl_encoder_pending_sort(root_entries, root_count);
+    if (!bc_hrbl_encoder_pending_sort(memory_context, root_entries, root_count)) {
+        if (root_entries != NULL) {
+            bc_allocators_pool_free(memory_context, root_entries);
+        }
+        bc_hrbl_encoder_buffer_destroy(&nodes_buffer);
+        bc_hrbl_encoder_pool_destroy(&pool);
+        return false;
+    }
 
     uint64_t nodes_size = nodes_buffer.size;
     uint64_t strings_offset = nodes_offset + nodes_size;
