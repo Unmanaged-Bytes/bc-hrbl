@@ -5,6 +5,7 @@
 #include "bc_hrbl_format_internal.h"
 
 #include "bc_allocators.h"
+#include "bc_allocators_arena.h"
 #include "bc_allocators_pool.h"
 #include "bc_core.h"
 #include "bc_core_memory.h"
@@ -19,14 +20,14 @@
 
 #include <xxhash.h>
 
-static bool bc_hrbl_writer_clone_bytes(bc_allocators_context_t* memory_context, const void* data, size_t length, void** out)
+static bool bc_hrbl_writer_arena_clone(bc_hrbl_writer_t* writer, const void* data, size_t length, void** out)
 {
     if (length == 0u) {
         *out = NULL;
         return true;
     }
     void* pointer = NULL;
-    if (!bc_allocators_pool_allocate(memory_context, length, &pointer)) {
+    if (!bc_allocators_arena_allocate(writer->arena, length, 1u, &pointer)) {
         return false;
     }
     memcpy(pointer, data, length);
@@ -37,7 +38,7 @@ static bool bc_hrbl_writer_clone_bytes(bc_allocators_context_t* memory_context, 
 static bc_hrbl_writer_node_t* bc_hrbl_writer_alloc_node(bc_hrbl_writer_t* writer)
 {
     void* pointer = NULL;
-    if (!bc_allocators_pool_allocate(writer->memory_context, sizeof(bc_hrbl_writer_node_t), &pointer)) {
+    if (!bc_allocators_arena_allocate(writer->arena, sizeof(bc_hrbl_writer_node_t), 8u, &pointer)) {
         writer->error_flag = true;
         return NULL;
     }
@@ -55,7 +56,7 @@ static bool bc_hrbl_writer_set_key(bc_hrbl_writer_t* writer, bc_hrbl_writer_node
         return false;
     }
     void* clone = NULL;
-    if (!bc_hrbl_writer_clone_bytes(writer->memory_context, key, key_length, &clone)) {
+    if (!bc_hrbl_writer_arena_clone(writer, key, key_length, &clone)) {
         return false;
     }
     node->key_data = (const char*)clone;
@@ -130,6 +131,10 @@ bool bc_hrbl_writer_create_ex(bc_allocators_context_t* memory_context, const bc_
     bc_hrbl_writer_t* writer = (bc_hrbl_writer_t*)pointer;
     memset(writer, 0, sizeof(*writer));
     writer->memory_context = memory_context;
+    if (!bc_allocators_arena_create_growable(memory_context, (size_t)256 * 1024, 0u, &writer->arena)) {
+        bc_allocators_pool_free(memory_context, writer);
+        return false;
+    }
     if (options != NULL) {
         writer->options = *options;
     } else {
@@ -144,6 +149,10 @@ void bc_hrbl_writer_destroy(bc_hrbl_writer_t* writer)
 {
     if (writer == NULL) {
         return;
+    }
+    if (writer->arena != NULL) {
+        bc_allocators_arena_destroy(writer->arena);
+        writer->arena = NULL;
     }
     bc_allocators_pool_free(writer->memory_context, writer);
 }
@@ -235,7 +244,7 @@ bool bc_hrbl_writer_set_string(bc_hrbl_writer_t* writer, const char* key, size_t
     }
     bc_hrbl_writer_node_t* node = writer->current_scope == NULL ? writer->root_last : writer->current_scope->last_child;
     void* clone = NULL;
-    if (!bc_hrbl_writer_clone_bytes(writer->memory_context, value, value_length, &clone)) {
+    if (!bc_hrbl_writer_arena_clone(writer, value, value_length, &clone)) {
         writer->error_flag = true;
         return false;
     }
@@ -294,7 +303,7 @@ bool bc_hrbl_writer_append_string(bc_hrbl_writer_t* writer, const char* value, s
     }
     bc_hrbl_writer_node_t* node = writer->current_scope->last_child;
     void* clone = NULL;
-    if (!bc_hrbl_writer_clone_bytes(writer->memory_context, value, value_length, &clone)) {
+    if (!bc_hrbl_writer_arena_clone(writer, value, value_length, &clone)) {
         writer->error_flag = true;
         return false;
     }

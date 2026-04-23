@@ -7,6 +7,7 @@
 #include "bc_hrbl_types.h"
 
 #include "bc_allocators.h"
+#include "bc_allocators_arena.h"
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -38,6 +39,7 @@ struct bc_hrbl_writer_node {
 
 struct bc_hrbl_writer {
     bc_allocators_context_t*      memory_context;
+    bc_allocators_arena_t*        arena;
     bc_hrbl_writer_options_t      options;
     bc_hrbl_writer_node_t*        root_first;
     bc_hrbl_writer_node_t*        root_last;
