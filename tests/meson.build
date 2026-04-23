@@ -29,3 +29,15 @@ test_bc_hrbl_export_json = executable('test_bc_hrbl_export_json',
     dependencies : [cmocka_dep, bc_hrbl_dep, xxhash_dep],
 )
 test('bc_hrbl_export_json', test_bc_hrbl_export_json)
+
+test_bc_hrbl_writer_roundtrip = executable('test_bc_hrbl_writer_roundtrip',
+    'test_bc_hrbl_writer_roundtrip.c',
+    dependencies : [cmocka_dep, bc_hrbl_dep],
+)
+test('bc_hrbl_writer_roundtrip', test_bc_hrbl_writer_roundtrip)
+
+test_bc_hrbl_convert_json = executable('test_bc_hrbl_convert_json',
+    'test_bc_hrbl_convert_json.c',
+    dependencies : [cmocka_dep, bc_hrbl_dep],
+)
+test('bc_hrbl_convert_json', test_bc_hrbl_convert_json)

@@ -8,5 +8,6 @@
 #include "bc_hrbl_writer.h"
 #include "bc_hrbl_verify.h"
 #include "bc_hrbl_export.h"
+#include "bc_hrbl_convert.h"
 
 #endif

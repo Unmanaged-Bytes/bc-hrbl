@@ -77,6 +77,7 @@ install_headers(
   'include/public/bc_hrbl_writer.h',
   'include/public/bc_hrbl_verify.h',
   'include/public/bc_hrbl_export.h',
+  'include/public/bc_hrbl_convert.h',
   subdir : 'bc',
 )
 

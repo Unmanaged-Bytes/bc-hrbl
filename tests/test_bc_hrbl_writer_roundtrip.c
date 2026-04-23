@@ -1,0 +1,218 @@
+// SPDX-License-Identifier: MIT
+
+#include "bc_hrbl.h"
+#include "bc_allocators.h"
+
+#include <stdarg.h>
+#include <stddef.h>
+#include <setjmp.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <cmocka.h>
+
+static bc_allocators_context_t* make_memory(void)
+{
+    bc_allocators_context_config_t config;
+    memset(&config, 0, sizeof(config));
+    bc_allocators_context_t* memory = NULL;
+    assert_true(bc_allocators_context_create(&config, &memory));
+    return memory;
+}
+
+static void test_writer_roundtrip_empty(void** state)
+{
+    (void)state;
+    bc_allocators_context_t* memory = make_memory();
+
+    bc_hrbl_writer_t* writer = NULL;
+    assert_true(bc_hrbl_writer_create(memory, &writer));
+
+    void* buffer = NULL;
+    size_t size = 0u;
+    assert_true(bc_hrbl_writer_finalize_to_buffer(writer, &buffer, &size));
+    assert_non_null(buffer);
+    assert_int_equal((int)size, 160);
+
+    assert_int_equal((int)bc_hrbl_verify_buffer(buffer, size), (int)BC_HRBL_VERIFY_OK);
+
+    bc_hrbl_reader_t* reader = NULL;
+    assert_true(bc_hrbl_reader_open_buffer(memory, buffer, size, &reader));
+    uint64_t count = 42u;
+    assert_true(bc_hrbl_reader_root_count(reader, &count));
+    assert_int_equal((int)count, 0);
+
+    bc_hrbl_reader_destroy(reader);
+    bc_hrbl_writer_destroy(writer);
+
+    char* json = NULL;
+    size_t json_size = 0u;
+    FILE* stream = open_memstream(&json, &json_size);
+    assert_non_null(stream);
+    bc_hrbl_reader_t* reader_again = NULL;
+    assert_true(bc_hrbl_reader_open_buffer(memory, buffer, size, &reader_again));
+    assert_true(bc_hrbl_export_json(reader_again, stream));
+    fflush(stream);
+    fclose(stream);
+    assert_string_equal(json, "{}\n");
+    free(json);
+    bc_hrbl_reader_destroy(reader_again);
+
+    free(buffer);
+    bc_allocators_context_destroy(memory);
+}
+
+static void test_writer_roundtrip_scalars(void** state)
+{
+    (void)state;
+    bc_allocators_context_t* memory = make_memory();
+
+    bc_hrbl_writer_t* writer = NULL;
+    assert_true(bc_hrbl_writer_create(memory, &writer));
+    assert_true(bc_hrbl_writer_set_int64(writer, "count", 5u, -42));
+    assert_true(bc_hrbl_writer_set_bool(writer, "enabled", 7u, true));
+    assert_true(bc_hrbl_writer_set_string(writer, "name", 4u, "hello", 5u));
+    assert_true(bc_hrbl_writer_set_null(writer, "maybe", 5u));
+    assert_true(bc_hrbl_writer_set_float64(writer, "pi", 2u, 3.14));
+
+    void* buffer = NULL;
+    size_t size = 0u;
+    assert_true(bc_hrbl_writer_finalize_to_buffer(writer, &buffer, &size));
+    bc_hrbl_writer_destroy(writer);
+
+    assert_int_equal((int)bc_hrbl_verify_buffer(buffer, size), (int)BC_HRBL_VERIFY_OK);
+
+    bc_hrbl_reader_t* reader = NULL;
+    assert_true(bc_hrbl_reader_open_buffer(memory, buffer, size, &reader));
+    uint64_t count = 0u;
+    assert_true(bc_hrbl_reader_root_count(reader, &count));
+    assert_int_equal((int)count, 5);
+
+    bc_hrbl_value_ref_t value;
+    int64_t loaded_int = 0;
+    bool loaded_bool = false;
+    const char* loaded_str = NULL;
+    size_t loaded_str_len = 0u;
+    double loaded_float = 0.0;
+    bc_hrbl_kind_t loaded_kind = BC_HRBL_KIND_NULL;
+
+    assert_true(bc_hrbl_reader_find(reader, "count", 5u, &value));
+    assert_true(bc_hrbl_reader_get_int64(&value, &loaded_int));
+    assert_true(loaded_int == -42);
+
+    assert_true(bc_hrbl_reader_find(reader, "enabled", 7u, &value));
+    assert_true(bc_hrbl_reader_get_bool(&value, &loaded_bool));
+    assert_true(loaded_bool);
+
+    assert_true(bc_hrbl_reader_find(reader, "name", 4u, &value));
+    assert_true(bc_hrbl_reader_get_string(&value, &loaded_str, &loaded_str_len));
+    assert_int_equal((int)loaded_str_len, 5);
+    assert_memory_equal(loaded_str, "hello", 5u);
+
+    assert_true(bc_hrbl_reader_find(reader, "maybe", 5u, &value));
+    assert_true(bc_hrbl_reader_value_kind(&value, &loaded_kind));
+    assert_int_equal((int)loaded_kind, (int)BC_HRBL_KIND_NULL);
+
+    assert_true(bc_hrbl_reader_find(reader, "pi", 2u, &value));
+    assert_true(bc_hrbl_reader_get_float64(&value, &loaded_float));
+    assert_true(loaded_float > 3.13 && loaded_float < 3.15);
+
+    bc_hrbl_reader_destroy(reader);
+    free(buffer);
+    bc_allocators_context_destroy(memory);
+}
+
+static void test_writer_roundtrip_nested(void** state)
+{
+    (void)state;
+    bc_allocators_context_t* memory = make_memory();
+
+    bc_hrbl_writer_t* writer = NULL;
+    assert_true(bc_hrbl_writer_create(memory, &writer));
+
+    assert_true(bc_hrbl_writer_begin_block(writer, "server", 6u));
+    assert_true(bc_hrbl_writer_set_string(writer, "host", 4u, "localhost", 9u));
+    assert_true(bc_hrbl_writer_set_int64(writer, "port", 4u, 8080));
+    assert_true(bc_hrbl_writer_end_block(writer));
+
+    assert_true(bc_hrbl_writer_begin_array(writer, "ports", 5u));
+    assert_true(bc_hrbl_writer_append_int64(writer, 80));
+    assert_true(bc_hrbl_writer_append_int64(writer, 443));
+    assert_true(bc_hrbl_writer_append_int64(writer, 8080));
+    assert_true(bc_hrbl_writer_end_array(writer));
+
+    void* buffer = NULL;
+    size_t size = 0u;
+    assert_true(bc_hrbl_writer_finalize_to_buffer(writer, &buffer, &size));
+    bc_hrbl_writer_destroy(writer);
+
+    assert_int_equal((int)bc_hrbl_verify_buffer(buffer, size), (int)BC_HRBL_VERIFY_OK);
+
+    bc_hrbl_reader_t* reader = NULL;
+    assert_true(bc_hrbl_reader_open_buffer(memory, buffer, size, &reader));
+
+    bc_hrbl_value_ref_t value;
+    int64_t loaded = 0;
+    const char* loaded_str = NULL;
+    size_t loaded_len = 0u;
+
+    assert_true(bc_hrbl_reader_find(reader, "server.port", 11u, &value));
+    assert_true(bc_hrbl_reader_get_int64(&value, &loaded));
+    assert_true(loaded == 8080);
+
+    assert_true(bc_hrbl_reader_find(reader, "server.host", 11u, &value));
+    assert_true(bc_hrbl_reader_get_string(&value, &loaded_str, &loaded_len));
+    assert_int_equal((int)loaded_len, 9);
+    assert_memory_equal(loaded_str, "localhost", 9u);
+
+    assert_true(bc_hrbl_reader_find(reader, "ports[0]", 8u, &value));
+    assert_true(bc_hrbl_reader_get_int64(&value, &loaded));
+    assert_true(loaded == 80);
+    assert_true(bc_hrbl_reader_find(reader, "ports[1]", 8u, &value));
+    assert_true(bc_hrbl_reader_get_int64(&value, &loaded));
+    assert_true(loaded == 443);
+    assert_true(bc_hrbl_reader_find(reader, "ports[2]", 8u, &value));
+    assert_true(bc_hrbl_reader_get_int64(&value, &loaded));
+    assert_true(loaded == 8080);
+
+    char* json = NULL;
+    size_t json_size = 0u;
+    FILE* stream = open_memstream(&json, &json_size);
+    assert_non_null(stream);
+    bc_hrbl_export_options_t options;
+    options.indent_spaces = 2u;
+    options.sort_keys = true;
+    options.ascii_only = false;
+    assert_true(bc_hrbl_export_json_ex(reader, stream, &options));
+    fflush(stream);
+    fclose(stream);
+    const char* expected =
+        "{\n"
+        "  \"ports\": [\n"
+        "    80,\n"
+        "    443,\n"
+        "    8080\n"
+        "  ],\n"
+        "  \"server\": {\n"
+        "    \"host\": \"localhost\",\n"
+        "    \"port\": 8080\n"
+        "  }\n"
+        "}\n";
+    assert_string_equal(json, expected);
+    free(json);
+
+    bc_hrbl_reader_destroy(reader);
+    free(buffer);
+    bc_allocators_context_destroy(memory);
+}
+
+int main(void)
+{
+    const struct CMUnitTest tests[] = {
+        cmocka_unit_test(test_writer_roundtrip_empty),
+        cmocka_unit_test(test_writer_roundtrip_scalars),
+        cmocka_unit_test(test_writer_roundtrip_nested),
+    };
+    return cmocka_run_group_tests(tests, NULL, NULL);
+}

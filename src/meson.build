@@ -1,8 +1,10 @@
 bc_hrbl_sources = [
     'reader/bc_hrbl_reader.c',
     'writer/bc_hrbl_writer.c',
+    'writer/bc_hrbl_writer_encoder.c',
     'verify/bc_hrbl_verify.c',
     'export/bc_hrbl_export.c',
+    'convert/bc_hrbl_convert_json.c',
 ]
 
 bc_hrbl_lib = static_library('bc-hrbl',
