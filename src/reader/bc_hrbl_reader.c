@@ -594,11 +594,27 @@ bool bc_hrbl_reader_resolve_path(const bc_hrbl_reader_t* reader, const char* pat
             cursor = close + 1u;
             continue;
         }
-        size_t segment_start = cursor;
-        while (cursor < path_length && path[cursor] != '.' && path[cursor] != '[') {
-            cursor += 1u;
+        size_t segment_start;
+        size_t segment_length;
+        if (path[cursor] == '\'' || path[cursor] == '"') {
+            char quote = path[cursor];
+            segment_start = cursor + 1u;
+            size_t close = segment_start;
+            while (close < path_length && path[close] != quote) {
+                close += 1u;
+            }
+            if (close >= path_length) {
+                return false;
+            }
+            segment_length = close - segment_start;
+            cursor = close + 1u;
+        } else {
+            segment_start = cursor;
+            while (cursor < path_length && path[cursor] != '.' && path[cursor] != '[') {
+                cursor += 1u;
+            }
+            segment_length = cursor - segment_start;
         }
-        size_t segment_length = cursor - segment_start;
         if (segment_length == 0u) {
             return false;
         }

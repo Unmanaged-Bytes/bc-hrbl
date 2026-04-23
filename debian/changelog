@@ -1,3 +1,13 @@
+libbc-hrbl (1.1.0-1) stable; urgency=medium
+
+  * Path grammar: quoted segments in bc_hrbl_reader_find. Segments wrapped
+    in single (') or double (") quotes are treated as literal keys, so
+    paths containing dots or brackets can now be looked up via the reader
+    find API and the bc-hrbl query CLI (e.g. files.'src/main.c'.digest).
+    No escape sequences; the segment ends at the next matching quote.
+
+ -- Younes Benmoussa <younes.benmoussa@pm.me>  Thu, 23 Apr 2026 19:00:00 +0000
+
 libbc-hrbl (1.0.0-1) stable; urgency=medium
 
   * Initial public release.

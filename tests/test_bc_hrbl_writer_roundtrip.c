@@ -207,12 +207,59 @@ static void test_writer_roundtrip_nested(void** state)
     bc_allocators_context_destroy(memory);
 }
 
+static void test_writer_roundtrip_quoted_path_segments(void** state)
+{
+    (void)state;
+    bc_allocators_context_t* memory = make_memory();
+
+    bc_hrbl_writer_t* writer = NULL;
+    assert_true(bc_hrbl_writer_create(memory, &writer));
+
+    assert_true(bc_hrbl_writer_begin_block(writer, "files", 5u));
+    assert_true(bc_hrbl_writer_set_int64(writer, "a.txt", 5u, 11));
+    assert_true(bc_hrbl_writer_set_int64(writer, "sub/b.log", 9u, 22));
+    assert_true(bc_hrbl_writer_set_int64(writer, "weird\"name", 10u, 33));
+    assert_true(bc_hrbl_writer_end_block(writer));
+
+    void* buffer = NULL;
+    size_t size = 0u;
+    assert_true(bc_hrbl_writer_finalize_to_buffer(writer, &buffer, &size));
+    bc_hrbl_writer_destroy(writer);
+
+    bc_hrbl_reader_t* reader = NULL;
+    assert_true(bc_hrbl_reader_open_buffer(memory, buffer, size, &reader));
+
+    bc_hrbl_value_ref_t value;
+    int64_t loaded = 0;
+
+    assert_true(bc_hrbl_reader_find(reader, "files.'a.txt'", 13u, &value));
+    assert_true(bc_hrbl_reader_get_int64(&value, &loaded));
+    assert_true(loaded == 11);
+
+    assert_true(bc_hrbl_reader_find(reader, "files.'sub/b.log'", 17u, &value));
+    assert_true(bc_hrbl_reader_get_int64(&value, &loaded));
+    assert_true(loaded == 22);
+
+    assert_true(bc_hrbl_reader_find(reader, "files.'weird\"name'", 18u, &value));
+    assert_true(bc_hrbl_reader_get_int64(&value, &loaded));
+    assert_true(loaded == 33);
+
+    assert_false(bc_hrbl_reader_find(reader, "files.'missing'", 15u, &value));
+    assert_false(bc_hrbl_reader_find(reader, "files.'unterminated", 19u, &value));
+    assert_false(bc_hrbl_reader_find(reader, "files.''", 8u, &value));
+
+    bc_hrbl_reader_destroy(reader);
+    bc_hrbl_free_buffer(memory, buffer);
+    bc_allocators_context_destroy(memory);
+}
+
 int main(void)
 {
     const struct CMUnitTest tests[] = {
         cmocka_unit_test(test_writer_roundtrip_empty),
         cmocka_unit_test(test_writer_roundtrip_scalars),
         cmocka_unit_test(test_writer_roundtrip_nested),
+        cmocka_unit_test(test_writer_roundtrip_quoted_path_segments),
     };
     return cmocka_run_group_tests(tests, NULL, NULL);
 }

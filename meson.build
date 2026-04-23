@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: MIT
 
 project('bc-hrbl', 'c',
-  version : '1.0.0',
+  version : '1.1.0',
   license : 'MIT',
   default_options : [
     'c_std=c11',

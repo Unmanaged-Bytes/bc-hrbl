@@ -84,6 +84,20 @@ if (bc_hrbl_reader_find(reader, "server.port", 11, &value)) {
 bc_hrbl_reader_destroy(reader);
 ```
 
+## Path grammar
+
+`bc_hrbl_reader_find` accepts a dotted path with optional array indices:
+
+- `foo.bar.baz` — nested block lookup
+- `items[3]` — array indexing (0-based, positive integers only)
+- `'literal.key'` or `"literal.key"` — quoted segment for keys that
+  contain `.`, `[` or other syntax characters. Single and double quotes
+  are interchangeable (pick whichever doesn't appear in the key). No
+  escape sequences; the segment ends at the next matching quote.
+
+Example: `files.'src/main.c'.digest` looks up the key `src/main.c`
+inside the `files` block.
+
 ## License
 
 MIT — see [LICENSE](LICENSE).
