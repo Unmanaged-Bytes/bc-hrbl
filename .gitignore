@@ -1,0 +1,13 @@
+build/
+*.o
+*.a
+*.so
+.vscode/
+.idea/
+compile_commands.json
+obj-*/
+debian/.debhelper/
+debian/files
+debian/*.substvars
+debian/debhelper-build-stamp
+debian/libbc-hrbl-dev/
