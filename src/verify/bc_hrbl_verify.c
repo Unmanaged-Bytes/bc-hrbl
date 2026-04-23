@@ -124,7 +124,7 @@ static bc_hrbl_verify_status_t bc_hrbl_verify_strings_pool(const uint8_t* data, 
             return BC_HRBL_VERIFY_ERR_BAD_STRING;
         }
         uint32_t length = 0u;
-        (void)bc_core_copy(&length, pool + offset, sizeof(length));
+        bc_hrbl_load_u32(&length, pool + offset);
         uint64_t total = (uint64_t)sizeof(uint32_t) + (uint64_t)length;
         if (offset + total > header->strings_size) {
             return BC_HRBL_VERIFY_ERR_BAD_STRING;
@@ -159,7 +159,7 @@ static bc_hrbl_verify_status_t bc_hrbl_verify_root_index(const uint8_t* data, co
     uint64_t previous_hash = 0u;
     for (uint64_t i = 0u; i < header->root_count; i += 1u) {
         bc_hrbl_entry_t entry;
-        (void)bc_core_copy(&entry, data + header->root_index_offset + i * BC_HRBL_ROOT_ENTRY_SIZE, sizeof(entry));
+        bc_hrbl_load_entry(&entry, data + header->root_index_offset + i * BC_HRBL_ROOT_ENTRY_SIZE);
         if (i != 0u) {
             if (entry.key_hash64 < previous_hash) {
                 return BC_HRBL_VERIFY_ERR_BAD_ROOT_INDEX;
@@ -191,7 +191,7 @@ bc_hrbl_verify_status_t bc_hrbl_verify_buffer(const void* data, size_t size)
     }
 
     bc_hrbl_header_t header;
-    (void)bc_core_copy(&header, data, sizeof(header));
+    bc_hrbl_load_header(&header, data);
 
     bc_hrbl_verify_status_t header_status = bc_hrbl_verify_header_layout(&header, size);
     if (header_status != BC_HRBL_VERIFY_OK) {
@@ -199,7 +199,7 @@ bc_hrbl_verify_status_t bc_hrbl_verify_buffer(const void* data, size_t size)
     }
 
     bc_hrbl_footer_t footer;
-    (void)bc_core_copy(&footer, (const uint8_t*)data + header.footer_offset, sizeof(footer));
+    bc_hrbl_load_footer(&footer, (const uint8_t*)data + header.footer_offset);
     if (footer.magic_end != BC_HRBL_MAGIC) {
         return BC_HRBL_VERIFY_ERR_BAD_FOOTER;
     }

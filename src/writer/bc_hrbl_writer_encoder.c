@@ -564,7 +564,7 @@ static bool bc_hrbl_encoder_emit_block(bc_hrbl_encoder_buffer_t* nodes, bc_hrbl_
         entry.key_pool_offset = pending[i].key_pool_offset;
         entry.key_length = pending[i].key_length;
         entry.value_offset = pending[i].value_offset;
-        (void)bc_core_copy(entries_write + (size_t)i * BC_HRBL_BLOCK_ENTRY_SIZE, &entry, sizeof(entry));
+        bc_hrbl_store_entry(entries_write + (size_t)i * BC_HRBL_BLOCK_ENTRY_SIZE, &entry);
     }
     if (pending != NULL) {
         bc_allocators_pool_free(pool->memory_context, pending);
@@ -611,7 +611,7 @@ static bool bc_hrbl_encoder_emit_array(bc_hrbl_encoder_buffer_t* nodes, bc_hrbl_
             return false;
         }
         uint8_t* base = &nodes->data[offsets_buffer_offset + (size_t)index * BC_HRBL_ARRAY_ELEMENT_SIZE];
-        (void)bc_core_copy(base, &element_offset, sizeof(element_offset));
+        bc_hrbl_store_u64(base, element_offset);
         index += 1u;
     }
     *out_value_offset = nodes_base_offset + kind_offset;
@@ -684,22 +684,22 @@ static bool bc_hrbl_encoder_patch_pool_offsets(bc_hrbl_encoder_buffer_t* nodes, 
         case BC_HRBL_KIND_STRING: {
             size_t body_offset = bc_hrbl_align_up(relative + 1u, 4u);
             bc_hrbl_string_ref_t ref;
-            (void)bc_core_copy(&ref, &nodes->data[body_offset], sizeof(ref));
+            bc_hrbl_load_string_ref(&ref, &nodes->data[body_offset]);
             ref.pool_offset = (uint32_t)(strings_offset + ref.pool_offset);
-            (void)bc_core_copy(&nodes->data[body_offset], &ref, sizeof(ref));
+            bc_hrbl_store_string_ref(&nodes->data[body_offset], &ref);
             break;
         }
         case BC_HRBL_KIND_BLOCK: {
             size_t body_offset = bc_hrbl_align_up(relative + 1u, 8u);
             bc_hrbl_block_header_t block_header;
-            (void)bc_core_copy(&block_header, &nodes->data[body_offset], sizeof(block_header));
+            bc_hrbl_load_block_header(&block_header, &nodes->data[body_offset]);
             size_t entries_offset = body_offset + sizeof(block_header);
             for (uint32_t ei = 0u; ei < block_header.child_count; ei += 1u) {
                 size_t entry_offset = entries_offset + (size_t)ei * BC_HRBL_BLOCK_ENTRY_SIZE;
                 bc_hrbl_entry_t entry;
-                (void)bc_core_copy(&entry, &nodes->data[entry_offset], sizeof(entry));
+                bc_hrbl_load_entry(&entry, &nodes->data[entry_offset]);
                 entry.key_pool_offset = (uint32_t)(strings_offset + entry.key_pool_offset);
-                (void)bc_core_copy(&nodes->data[entry_offset], &entry, sizeof(entry));
+                bc_hrbl_store_entry(&nodes->data[entry_offset], &entry);
                 if (stack_size == stack_capacity) {
                     stack_capacity *= 2u;
                     void* grown = NULL;
@@ -717,12 +717,12 @@ static bool bc_hrbl_encoder_patch_pool_offsets(bc_hrbl_encoder_buffer_t* nodes, 
         case BC_HRBL_KIND_ARRAY: {
             size_t body_offset = bc_hrbl_align_up(relative + 1u, 8u);
             bc_hrbl_array_header_t array_header;
-            (void)bc_core_copy(&array_header, &nodes->data[body_offset], sizeof(array_header));
+            bc_hrbl_load_array_header(&array_header, &nodes->data[body_offset]);
             size_t offsets_offset = body_offset + sizeof(array_header);
             for (uint32_t ei = 0u; ei < array_header.element_count; ei += 1u) {
                 size_t offset_location = offsets_offset + (size_t)ei * BC_HRBL_ARRAY_ELEMENT_SIZE;
                 uint64_t value_offset = 0u;
-                (void)bc_core_copy(&value_offset, &nodes->data[offset_location], sizeof(value_offset));
+                bc_hrbl_load_u64(&value_offset, &nodes->data[offset_location]);
                 if (stack_size == stack_capacity) {
                     stack_capacity *= 2u;
                     void* grown = NULL;
@@ -895,7 +895,7 @@ bool bc_hrbl_writer_serialize_to_buffer(bc_hrbl_writer_t* writer, uint8_t** out_
     header.strings_count = (uint64_t)pool.entries_count;
     header.footer_offset = footer_offset;
     header.checksum_xxh3_64 = 0u;
-    (void)bc_core_copy(&output_data[0], &header, sizeof(header));
+    __builtin_memcpy(&output_data[0], &header, sizeof(header));
 
     for (uint64_t i = 0u; i < root_count; i += 1u) {
         bc_hrbl_entry_t entry;
@@ -903,7 +903,7 @@ bool bc_hrbl_writer_serialize_to_buffer(bc_hrbl_writer_t* writer, uint8_t** out_
         entry.key_pool_offset = root_entries[i].key_pool_offset;
         entry.key_length = root_entries[i].key_length;
         entry.value_offset = root_entries[i].value_offset;
-        (void)bc_core_copy(&output_data[root_index_offset + i * BC_HRBL_ROOT_ENTRY_SIZE], &entry, sizeof(entry));
+        bc_hrbl_store_entry(&output_data[root_index_offset + i * BC_HRBL_ROOT_ENTRY_SIZE], &entry);
     }
 
     if (nodes_buffer.size != 0u) {
@@ -916,14 +916,14 @@ bool bc_hrbl_writer_serialize_to_buffer(bc_hrbl_writer_t* writer, uint8_t** out_
     size_t payload_length = (size_t)(footer_offset - root_index_offset);
     uint64_t checksum = (uint64_t)XXH3_64bits(&output_data[root_index_offset], payload_length);
 
-    (void)bc_core_copy(&output_data[offsetof(bc_hrbl_header_t, checksum_xxh3_64)], &checksum, sizeof(checksum));
+    bc_hrbl_store_u64(&output_data[offsetof(bc_hrbl_header_t, checksum_xxh3_64)], checksum);
 
     bc_hrbl_footer_t footer;
     (void)bc_core_zero(&footer, sizeof(footer));
     footer.checksum_xxh3_64 = checksum;
     footer.file_size = file_size;
     footer.magic_end = BC_HRBL_MAGIC;
-    (void)bc_core_copy(&output_data[footer_offset], &footer, sizeof(footer));
+    __builtin_memcpy(&output_data[footer_offset], &footer, sizeof(footer));
 
     bc_allocators_pool_free(memory_context, root_entries);
     bc_hrbl_encoder_buffer_destroy(&nodes_buffer);
