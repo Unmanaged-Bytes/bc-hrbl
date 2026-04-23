@@ -4,8 +4,9 @@
 ![Language: C11](https://img.shields.io/badge/language-C11-informational)
 ![Platform: Linux](https://img.shields.io/badge/platform-Linux-lightgrey)
 
-> Hash-Routed Binary Layout — zero-copy mmap reader, parallel writer, verify,
-> and one-way JSON export. Part of the `bc-*` ecosystem.
+> Hash-Routed Binary Layout — zero-copy mmap reader, writer, verify,
+> one-way exports (JSON / YAML / INI) and a JSON bootstrap convert.
+> Part of the `bc-*` ecosystem.
 
 ## Scope
 
@@ -17,10 +18,15 @@ Binary configuration / manifest format:
 - mmap read-only reader, `verify()` mandatory before any use.
 - Typed scalars (null, bool, int64, uint64, float64, string) plus
   blocks (key → value maps) and arrays.
-- Writer builds in memory and finalises to an immutable `.hrbl`.
-- `bc_hrbl_export_json()` emits pretty JSON; there is no text parser
-  back into `.hrbl`. `bc-hrbl convert --from=json` (CLI) uses the
-  writer API through a JSON bootstrap parser.
+- Writer builds in memory (arena-backed) and finalises to an
+  immutable `.hrbl`.
+- Export API:
+  - `bc_hrbl_export_json()` — pretty JSON (default indent=2).
+  - `bc_hrbl_export_yaml()` — block-style YAML via libyaml.
+  - `bc_hrbl_export_ini()` — flat + `[section]` dotted INI.
+- Import: `bc_hrbl_convert_json_to_writer()` — JSON → .hrbl via
+  json-c. The binary format remains the source of truth; no
+  text → .hrbl inverse parser outside JSON.
 
 ## Requirements
 
@@ -29,6 +35,7 @@ Binary configuration / manifest format:
 - `libbc-core-dev (>= 1.3.1)`, `libbc-allocators-dev (>= 1.2.0)`,
   `libbc-io-dev (>= 1.1.1)`, `libbc-concurrency-dev (>= 1.1.1)`
 - `libxxhash-dev (>= 0.8.0)`
+- `libjson-c-dev (>= 0.15)`, `libyaml-dev (>= 0.2.0)`
 - `libcmocka-dev` (tests, optional for end users)
 
 ## Build
@@ -55,7 +62,7 @@ pkg-config --cflags --libs bc-hrbl
 The package installs:
 - Headers under `/usr/local/include/bc/` (`bc_hrbl.h`, `bc_hrbl_types.h`,
   `bc_hrbl_reader.h`, `bc_hrbl_writer.h`, `bc_hrbl_verify.h`,
-  `bc_hrbl_export.h`)
+  `bc_hrbl_export.h`, `bc_hrbl_convert.h`)
 - Static library at `/usr/local/lib/<multiarch>/libbc-hrbl.a`
 - pkg-config descriptor at `/usr/local/lib/<multiarch>/pkgconfig/bc-hrbl.pc`
 
