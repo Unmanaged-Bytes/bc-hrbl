@@ -9,6 +9,7 @@
 #include "bc_core.h"
 #include "bc_core_memory.h"
 
+#include <pthread.h>
 #include <stdint.h>
 #include <stddef.h>
 #include <stdlib.h>
@@ -129,6 +130,7 @@ typedef struct bc_hrbl_encoder_pool {
     uint64_t*                       fixup_offsets;
     size_t                          fixup_count;
     size_t                          fixup_capacity;
+    size_t                          worker_count;
 } bc_hrbl_encoder_pool_t;
 
 static bool bc_hrbl_encoder_pool_record_fixup(bc_hrbl_encoder_pool_t* pool, uint64_t node_offset)
@@ -168,6 +170,7 @@ static bool bc_hrbl_encoder_pool_init(bc_hrbl_encoder_pool_t* pool, bc_allocator
     pool->fixup_offsets = NULL;
     pool->fixup_count = 0u;
     pool->fixup_capacity = 0u;
+    pool->worker_count = 0u;
     if (initial_capacity < 4096u) {
         initial_capacity = 4096u;
     }
@@ -371,8 +374,8 @@ typedef struct bc_hrbl_encoder_pending_entry {
     uint64_t value_offset;
 } bc_hrbl_encoder_pending_entry_t;
 
-static bool bc_hrbl_encoder_pending_radix_sort(bc_allocators_context_t* memory_context, bc_hrbl_encoder_pending_entry_t* entries,
-                                               size_t count)
+static bool bc_hrbl_encoder_pending_radix_sort_serial(bc_allocators_context_t* memory_context,
+                                                      bc_hrbl_encoder_pending_entry_t* entries, size_t count)
 {
     void* pointer = NULL;
     if (!bc_allocators_pool_allocate(memory_context, count * sizeof(bc_hrbl_encoder_pending_entry_t), &pointer)) {
@@ -407,8 +410,134 @@ static bool bc_hrbl_encoder_pending_radix_sort(bc_allocators_context_t* memory_c
     return true;
 }
 
+typedef struct bc_hrbl_encoder_radix_worker_context {
+    bc_hrbl_encoder_pending_entry_t* source;
+    bc_hrbl_encoder_pending_entry_t* destination;
+    size_t                           range_start;
+    size_t                           range_end;
+    unsigned int                     shift;
+    size_t                           local_counts[256];
+    size_t                           local_write_positions[256];
+} bc_hrbl_encoder_radix_worker_context_t;
+
+static void* bc_hrbl_encoder_radix_count_worker(void* argument)
+{
+    bc_hrbl_encoder_radix_worker_context_t* context = (bc_hrbl_encoder_radix_worker_context_t*)argument;
+    (void)bc_core_zero(context->local_counts, sizeof(context->local_counts));
+    for (size_t i = context->range_start; i < context->range_end; i += 1u) {
+        unsigned int byte = (unsigned int)((context->source[i].key_hash64 >> context->shift) & 0xFFu);
+        context->local_counts[byte] += 1u;
+    }
+    return NULL;
+}
+
+static void* bc_hrbl_encoder_radix_scatter_worker(void* argument)
+{
+    bc_hrbl_encoder_radix_worker_context_t* context = (bc_hrbl_encoder_radix_worker_context_t*)argument;
+    for (size_t i = context->range_start; i < context->range_end; i += 1u) {
+        unsigned int byte = (unsigned int)((context->source[i].key_hash64 >> context->shift) & 0xFFu);
+        context->destination[context->local_write_positions[byte]] = context->source[i];
+        context->local_write_positions[byte] += 1u;
+    }
+    return NULL;
+}
+
+static bool bc_hrbl_encoder_pending_radix_sort_parallel(bc_allocators_context_t* memory_context,
+                                                       bc_hrbl_encoder_pending_entry_t* entries, size_t count,
+                                                       size_t worker_count)
+{
+    void* scratch_pointer = NULL;
+    if (!bc_allocators_pool_allocate(memory_context, count * sizeof(bc_hrbl_encoder_pending_entry_t), &scratch_pointer)) {
+        return false;
+    }
+    void* contexts_pointer = NULL;
+    if (!bc_allocators_pool_allocate(memory_context, worker_count * sizeof(bc_hrbl_encoder_radix_worker_context_t),
+                                     &contexts_pointer)) {
+        bc_allocators_pool_free(memory_context, scratch_pointer);
+        return false;
+    }
+    void* threads_pointer = NULL;
+    if (!bc_allocators_pool_allocate(memory_context, worker_count * sizeof(pthread_t), &threads_pointer)) {
+        bc_allocators_pool_free(memory_context, scratch_pointer);
+        bc_allocators_pool_free(memory_context, contexts_pointer);
+        return false;
+    }
+
+    bc_hrbl_encoder_pending_entry_t* scratch = (bc_hrbl_encoder_pending_entry_t*)scratch_pointer;
+    bc_hrbl_encoder_radix_worker_context_t* contexts = (bc_hrbl_encoder_radix_worker_context_t*)contexts_pointer;
+    pthread_t* threads = (pthread_t*)threads_pointer;
+
+    bc_hrbl_encoder_pending_entry_t* source = entries;
+    bc_hrbl_encoder_pending_entry_t* destination = scratch;
+    size_t chunk_size = count / worker_count;
+
+    for (unsigned int pass = 0u; pass < 8u; pass += 1u) {
+        unsigned int shift = pass * 8u;
+        for (size_t worker_index = 0u; worker_index < worker_count; worker_index += 1u) {
+            contexts[worker_index].source = source;
+            contexts[worker_index].destination = destination;
+            contexts[worker_index].range_start = worker_index * chunk_size;
+            contexts[worker_index].range_end = (worker_index + 1u == worker_count) ? count : (worker_index + 1u) * chunk_size;
+            contexts[worker_index].shift = shift;
+            if (pthread_create(&threads[worker_index], NULL, bc_hrbl_encoder_radix_count_worker, &contexts[worker_index]) != 0) {
+                for (size_t joined = 0u; joined < worker_index; joined += 1u) {
+                    pthread_join(threads[joined], NULL);
+                }
+                bc_allocators_pool_free(memory_context, scratch_pointer);
+                bc_allocators_pool_free(memory_context, contexts_pointer);
+                bc_allocators_pool_free(memory_context, threads_pointer);
+                return false;
+            }
+        }
+        for (size_t worker_index = 0u; worker_index < worker_count; worker_index += 1u) {
+            pthread_join(threads[worker_index], NULL);
+        }
+        size_t running_total = 0u;
+        for (unsigned int bucket = 0u; bucket < 256u; bucket += 1u) {
+            size_t write_position = running_total;
+            for (size_t worker_index = 0u; worker_index < worker_count; worker_index += 1u) {
+                contexts[worker_index].local_write_positions[bucket] = write_position;
+                write_position += contexts[worker_index].local_counts[bucket];
+            }
+            running_total = write_position;
+        }
+        for (size_t worker_index = 0u; worker_index < worker_count; worker_index += 1u) {
+            if (pthread_create(&threads[worker_index], NULL, bc_hrbl_encoder_radix_scatter_worker,
+                               &contexts[worker_index]) != 0) {
+                for (size_t joined = 0u; joined < worker_index; joined += 1u) {
+                    pthread_join(threads[joined], NULL);
+                }
+                bc_allocators_pool_free(memory_context, scratch_pointer);
+                bc_allocators_pool_free(memory_context, contexts_pointer);
+                bc_allocators_pool_free(memory_context, threads_pointer);
+                return false;
+            }
+        }
+        for (size_t worker_index = 0u; worker_index < worker_count; worker_index += 1u) {
+            pthread_join(threads[worker_index], NULL);
+        }
+        bc_hrbl_encoder_pending_entry_t* swap = source;
+        source = destination;
+        destination = swap;
+    }
+
+    bc_allocators_pool_free(memory_context, scratch_pointer);
+    bc_allocators_pool_free(memory_context, contexts_pointer);
+    bc_allocators_pool_free(memory_context, threads_pointer);
+    return true;
+}
+
+static bool bc_hrbl_encoder_pending_radix_sort(bc_allocators_context_t* memory_context, bc_hrbl_encoder_pending_entry_t* entries,
+                                               size_t count, size_t worker_count)
+{
+    if (worker_count >= 2u && count >= 10000u) {
+        return bc_hrbl_encoder_pending_radix_sort_parallel(memory_context, entries, count, worker_count);
+    }
+    return bc_hrbl_encoder_pending_radix_sort_serial(memory_context, entries, count);
+}
+
 static bool bc_hrbl_encoder_pending_sort(bc_allocators_context_t* memory_context, bc_hrbl_encoder_pending_entry_t* entries,
-                                         size_t count)
+                                         size_t count, size_t worker_count)
 {
     if (count < 2u) {
         return true;
@@ -425,7 +554,7 @@ static bool bc_hrbl_encoder_pending_sort(bc_allocators_context_t* memory_context
         }
         return true;
     }
-    return bc_hrbl_encoder_pending_radix_sort(memory_context, entries, count);
+    return bc_hrbl_encoder_pending_radix_sort(memory_context, entries, count, worker_count);
 }
 
 static bool bc_hrbl_encoder_emit_value(bc_hrbl_encoder_buffer_t* nodes, bc_hrbl_encoder_pool_t* pool,
@@ -582,7 +711,7 @@ static bool bc_hrbl_encoder_emit_block(bc_hrbl_encoder_buffer_t* nodes, bc_hrbl_
         index += 1u;
     }
 
-    if (!bc_hrbl_encoder_pending_sort(pool->memory_context, pending, child_count)) {
+    if (!bc_hrbl_encoder_pending_sort(pool->memory_context, pending, child_count, pool->worker_count)) {
         if (pending != NULL) {
             bc_allocators_pool_free(pool->memory_context, pending);
         }
@@ -696,6 +825,7 @@ bool bc_hrbl_writer_serialize_to_buffer(bc_hrbl_writer_t* writer, uint8_t** out_
     if (!bc_hrbl_encoder_pool_init(&pool, memory_context, 4096u)) {
         return false;
     }
+    pool.worker_count = (size_t)writer->options.worker_count;
     for (bc_hrbl_writer_node_t* root = writer->root_first; root != NULL; root = root->next_sibling) {
         if (!bc_hrbl_encoder_collect_strings(&pool, root)) {
             bc_hrbl_encoder_pool_destroy(&pool);
@@ -765,7 +895,7 @@ bool bc_hrbl_writer_serialize_to_buffer(bc_hrbl_writer_t* writer, uint8_t** out_
         root_index += 1u;
     }
 
-    if (!bc_hrbl_encoder_pending_sort(memory_context, root_entries, root_count)) {
+    if (!bc_hrbl_encoder_pending_sort(memory_context, root_entries, root_count, pool.worker_count)) {
         if (root_entries != NULL) {
             bc_allocators_pool_free(memory_context, root_entries);
         }
