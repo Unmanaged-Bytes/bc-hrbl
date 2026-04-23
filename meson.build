@@ -55,6 +55,8 @@ bc_allocators_dep  = dependency('bc-allocators',  version : '>= 1.2.0')
 bc_io_dep          = dependency('bc-io',          version : '>= 1.1.1')
 bc_concurrency_dep = dependency('bc-concurrency', version : '>= 1.1.1')
 xxhash_dep         = dependency('libxxhash',      version : '>= 0.8.0')
+json_c_dep         = dependency('json-c',         version : '>= 0.15')
+yaml_dep           = dependency('yaml-0.1',       version : '>= 0.2.0')
 thread_dep         = dependency('threads')
 
 bc_hrbl_public_inc   = include_directories('include/public')

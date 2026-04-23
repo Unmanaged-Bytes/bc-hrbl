@@ -295,16 +295,23 @@ static bool bc_hrbl_enc_pool_intern(bc_hrbl_enc_pool_t* pool, const char* data, 
     return bc_hrbl_enc_pool_intern_with_hash(pool, data, length, raw_hash, out_offset);
 }
 
-static bool bc_hrbl_enc_collect_strings(bc_hrbl_enc_pool_t* pool, const bc_hrbl_writer_node_t* node)
+static bool bc_hrbl_enc_collect_strings(bc_hrbl_enc_pool_t* pool, bc_hrbl_writer_node_t* node)
 {
     if (node == NULL) {
         return true;
     }
     if (node->key_data != NULL && node->key_length != 0u) {
-        uint32_t dummy = 0u;
-        if (!bc_hrbl_enc_pool_intern_with_hash(pool, node->key_data, node->key_length, node->key_hash64, &dummy)) {
+        uint32_t offset = 0u;
+        if (!bc_hrbl_enc_pool_intern_with_hash(pool, node->key_data, node->key_length, node->key_hash64, &offset)) {
             return false;
         }
+        node->cached_key_pool_offset = offset;
+    } else if (node->key_data != NULL && node->key_length == 0u) {
+        uint32_t offset = 0u;
+        if (!bc_hrbl_enc_pool_intern_with_hash(pool, node->key_data, 0u, node->key_hash64, &offset)) {
+            return false;
+        }
+        node->cached_key_pool_offset = offset;
     }
     if (node->kind == BC_HRBL_KIND_STRING) {
         const char* data = node->as.string_value.data;
@@ -313,12 +320,13 @@ static bool bc_hrbl_enc_collect_strings(bc_hrbl_enc_pool_t* pool, const bc_hrbl_
             data = "";
             length = 0u;
         }
-        uint32_t dummy = 0u;
-        if (!bc_hrbl_enc_pool_intern(pool, data, (size_t)length, &dummy)) {
+        uint32_t offset = 0u;
+        if (!bc_hrbl_enc_pool_intern(pool, data, (size_t)length, &offset)) {
             return false;
         }
+        node->cached_string_pool_offset = offset;
     }
-    for (const bc_hrbl_writer_node_t* child = node->first_child; child != NULL; child = child->next_sibling) {
+    for (bc_hrbl_writer_node_t* child = node->first_child; child != NULL; child = child->next_sibling) {
         if (!bc_hrbl_enc_collect_strings(pool, child)) {
             return false;
         }
@@ -417,9 +425,11 @@ static bool bc_hrbl_enc_emit_scalar(bc_hrbl_enc_buffer_t* nodes, bc_hrbl_enc_poo
             data = "";
             length = 0u;
         }
-        uint32_t pool_offset_intra = 0u;
-        if (!bc_hrbl_enc_pool_intern(pool, data, length, &pool_offset_intra)) {
-            return false;
+        uint32_t pool_offset_intra = node->cached_string_pool_offset;
+        if (pool_offset_intra == BC_HRBL_WRITER_STRING_OFFSET_NONE) {
+            if (!bc_hrbl_enc_pool_intern(pool, data, length, &pool_offset_intra)) {
+                return false;
+            }
         }
         bc_hrbl_string_ref_t ref;
         ref.pool_offset = pool_offset_intra;
@@ -490,12 +500,14 @@ static bool bc_hrbl_enc_emit_block(bc_hrbl_enc_buffer_t* nodes, bc_hrbl_enc_pool
         if (key_length == 0u && child->key_data == NULL) {
             key_hash = (uint64_t)XXH3_64bits(key_data, key_length);
         }
-        uint32_t key_pool_offset = 0u;
-        if (!bc_hrbl_enc_pool_intern_with_hash(pool, key_data, key_length, key_hash, &key_pool_offset)) {
-            if (pending != NULL) {
-                bc_allocators_pool_free(pool->memory_context, pending);
+        uint32_t key_pool_offset = child->cached_key_pool_offset;
+        if (key_pool_offset == BC_HRBL_WRITER_POOL_OFFSET_NONE) {
+            if (!bc_hrbl_enc_pool_intern_with_hash(pool, key_data, key_length, key_hash, &key_pool_offset)) {
+                if (pending != NULL) {
+                    bc_allocators_pool_free(pool->memory_context, pending);
+                }
+                return false;
             }
-            return false;
         }
         uint64_t child_value_offset = 0u;
         if (!bc_hrbl_enc_emit_value(nodes, pool, nodes_base_offset, child, &child_value_offset)) {
@@ -707,7 +719,7 @@ bool bc_hrbl_writer_serialize_to_buffer(bc_hrbl_writer_t* writer, uint8_t** out_
     if (!bc_hrbl_enc_pool_init(&pool, memory_context, 4096u)) {
         return false;
     }
-    for (const bc_hrbl_writer_node_t* root = writer->root_first; root != NULL; root = root->next_sibling) {
+    for (bc_hrbl_writer_node_t* root = writer->root_first; root != NULL; root = root->next_sibling) {
         if (!bc_hrbl_enc_collect_strings(&pool, root)) {
             bc_hrbl_enc_pool_destroy(&pool);
             return false;
@@ -748,14 +760,16 @@ bool bc_hrbl_writer_serialize_to_buffer(bc_hrbl_writer_t* writer, uint8_t** out_
         if (key_length == 0u && root->key_data == NULL) {
             key_hash = (uint64_t)XXH3_64bits(key_data, key_length);
         }
-        uint32_t key_pool_offset = 0u;
-        if (!bc_hrbl_enc_pool_intern_with_hash(&pool, key_data, key_length, key_hash, &key_pool_offset)) {
-            if (root_entries != NULL) {
-                bc_allocators_pool_free(memory_context, root_entries);
+        uint32_t key_pool_offset = root->cached_key_pool_offset;
+        if (key_pool_offset == BC_HRBL_WRITER_POOL_OFFSET_NONE) {
+            if (!bc_hrbl_enc_pool_intern_with_hash(&pool, key_data, key_length, key_hash, &key_pool_offset)) {
+                if (root_entries != NULL) {
+                    bc_allocators_pool_free(memory_context, root_entries);
+                }
+                bc_hrbl_enc_buffer_destroy(&nodes_buffer);
+                bc_hrbl_enc_pool_destroy(&pool);
+                return false;
             }
-            bc_hrbl_enc_buffer_destroy(&nodes_buffer);
-            bc_hrbl_enc_pool_destroy(&pool);
-            return false;
         }
         uint64_t root_value_offset = 0u;
         if (!bc_hrbl_enc_emit_value(&nodes_buffer, &pool, nodes_offset, root, &root_value_offset)) {

@@ -41,3 +41,9 @@ test_bc_hrbl_convert_json = executable('test_bc_hrbl_convert_json',
     dependencies : [cmocka_dep, bc_hrbl_dep],
 )
 test('bc_hrbl_convert_json', test_bc_hrbl_convert_json)
+
+test_bc_hrbl_export_yaml_ini = executable('test_bc_hrbl_export_yaml_ini',
+    'test_bc_hrbl_export_yaml_ini.c',
+    dependencies : [cmocka_dep, bc_hrbl_dep],
+)
+test('bc_hrbl_export_yaml_ini', test_bc_hrbl_export_yaml_ini)

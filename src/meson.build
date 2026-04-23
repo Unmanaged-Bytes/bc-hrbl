@@ -4,6 +4,8 @@ bc_hrbl_sources = [
     'writer/bc_hrbl_writer_encoder.c',
     'verify/bc_hrbl_verify.c',
     'export/bc_hrbl_export.c',
+    'export/bc_hrbl_export_yaml.c',
+    'export/bc_hrbl_export_ini.c',
     'convert/bc_hrbl_convert_json.c',
 ]
 
@@ -16,6 +18,8 @@ bc_hrbl_lib = static_library('bc-hrbl',
         bc_io_dep,
         bc_concurrency_dep,
         xxhash_dep,
+        json_c_dep,
+        yaml_dep,
         thread_dep,
     ],
     c_args : lto_c_args,
@@ -32,6 +36,8 @@ bc_hrbl_dep = declare_dependency(
         bc_io_dep,
         bc_concurrency_dep,
         xxhash_dep,
+        json_c_dep,
+        yaml_dep,
         thread_dep,
     ],
 )

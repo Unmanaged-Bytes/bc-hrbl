@@ -44,6 +44,8 @@ static bc_hrbl_writer_node_t* bc_hrbl_writer_alloc_node(bc_hrbl_writer_t* writer
     }
     bc_hrbl_writer_node_t* node = (bc_hrbl_writer_node_t*)pointer;
     memset(node, 0, sizeof(*node));
+    node->cached_key_pool_offset = BC_HRBL_WRITER_POOL_OFFSET_NONE;
+    node->cached_string_pool_offset = BC_HRBL_WRITER_STRING_OFFSET_NONE;
     return node;
 }
 

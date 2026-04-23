@@ -1,0 +1,385 @@
+// SPDX-License-Identifier: MIT
+
+#include "bc_hrbl_export.h"
+#include "bc_hrbl_reader.h"
+#include "bc_hrbl_reader_internal.h"
+#include "bc_hrbl_format_internal.h"
+
+#include <inttypes.h>
+#include <math.h>
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+#include <yaml.h>
+
+typedef struct bc_hrbl_yaml_state {
+    FILE*                           stream;
+    const bc_hrbl_reader_t*         reader;
+    const bc_hrbl_export_options_t* options;
+    yaml_emitter_t                  emitter;
+    bool                            failed;
+} bc_hrbl_yaml_state_t;
+
+/* cppcheck-suppress [constParameterCallback,constParameterPointer] */
+static int bc_hrbl_yaml_write_handler(void* user_data, unsigned char* buffer, size_t size)
+{
+    bc_hrbl_yaml_state_t* state = (bc_hrbl_yaml_state_t*)user_data;
+    if (size == 0u) {
+        return 1;
+    }
+    if (fwrite(buffer, 1u, size, state->stream) != size) {
+        state->failed = true;
+        return 0;
+    }
+    return 1;
+}
+
+static bool bc_hrbl_yaml_emit_scalar_str(bc_hrbl_yaml_state_t* state, const char* data, size_t length)
+{
+    yaml_event_t event;
+    yaml_scalar_event_initialize(&event, NULL, NULL, (yaml_char_t*)(void*)data, (int)length, 1, 1,
+                                 YAML_PLAIN_SCALAR_STYLE);
+    if (yaml_emitter_emit(&state->emitter, &event) == 0) {
+        state->failed = true;
+        return false;
+    }
+    return true;
+}
+
+static bool bc_hrbl_yaml_emit_scalar_double_quoted(bc_hrbl_yaml_state_t* state, const char* data, size_t length)
+{
+    yaml_event_t event;
+    yaml_scalar_event_initialize(&event, NULL, NULL, (yaml_char_t*)(void*)data, (int)length, 0, 1,
+                                 YAML_DOUBLE_QUOTED_SCALAR_STYLE);
+    if (yaml_emitter_emit(&state->emitter, &event) == 0) {
+        state->failed = true;
+        return false;
+    }
+    return true;
+}
+
+static bool bc_hrbl_yaml_emit_mapping_start(bc_hrbl_yaml_state_t* state)
+{
+    yaml_event_t event;
+    yaml_mapping_start_event_initialize(&event, NULL, NULL, 1, YAML_BLOCK_MAPPING_STYLE);
+    if (yaml_emitter_emit(&state->emitter, &event) == 0) {
+        state->failed = true;
+        return false;
+    }
+    return true;
+}
+
+static bool bc_hrbl_yaml_emit_mapping_end(bc_hrbl_yaml_state_t* state)
+{
+    yaml_event_t event;
+    yaml_mapping_end_event_initialize(&event);
+    if (yaml_emitter_emit(&state->emitter, &event) == 0) {
+        state->failed = true;
+        return false;
+    }
+    return true;
+}
+
+static bool bc_hrbl_yaml_emit_sequence_start(bc_hrbl_yaml_state_t* state)
+{
+    yaml_event_t event;
+    yaml_sequence_start_event_initialize(&event, NULL, NULL, 1, YAML_BLOCK_SEQUENCE_STYLE);
+    if (yaml_emitter_emit(&state->emitter, &event) == 0) {
+        state->failed = true;
+        return false;
+    }
+    return true;
+}
+
+static bool bc_hrbl_yaml_emit_sequence_end(bc_hrbl_yaml_state_t* state)
+{
+    yaml_event_t event;
+    yaml_sequence_end_event_initialize(&event);
+    if (yaml_emitter_emit(&state->emitter, &event) == 0) {
+        state->failed = true;
+        return false;
+    }
+    return true;
+}
+
+typedef struct bc_hrbl_yaml_sort_entry {
+    uint64_t key_pool_offset;
+    uint32_t key_length;
+    uint64_t value_offset;
+} bc_hrbl_yaml_sort_entry_t;
+
+/* cppcheck-suppress [constParameterCallback] */
+static int bc_hrbl_yaml_sort_by_key(const void* left, const void* right, void* cookie)
+{
+    const bc_hrbl_yaml_sort_entry_t* a = (const bc_hrbl_yaml_sort_entry_t*)left;
+    const bc_hrbl_yaml_sort_entry_t* b = (const bc_hrbl_yaml_sort_entry_t*)right;
+    const bc_hrbl_reader_t* reader = (const bc_hrbl_reader_t*)cookie;
+    const char* a_data = (const char*)&reader->base[(size_t)a->key_pool_offset + sizeof(uint32_t)];
+    const char* b_data = (const char*)&reader->base[(size_t)b->key_pool_offset + sizeof(uint32_t)];
+    size_t a_length = (size_t)a->key_length;
+    size_t b_length = (size_t)b->key_length;
+    size_t min_length = a_length < b_length ? a_length : b_length;
+    int cmp = memcmp(a_data, b_data, min_length);
+    if (cmp != 0) {
+        return cmp;
+    }
+    if (a_length < b_length) {
+        return -1;
+    }
+    if (a_length > b_length) {
+        return 1;
+    }
+    return 0;
+}
+
+static bool bc_hrbl_yaml_emit_value(bc_hrbl_yaml_state_t* state, uint64_t value_offset);
+
+static bool bc_hrbl_yaml_emit_block(bc_hrbl_yaml_state_t* state, uint64_t block_offset)
+{
+    bc_hrbl_block_header_t header;
+    uint64_t entries_offset = 0u;
+    if (!bc_hrbl_reader_block_body_offsets(state->reader, block_offset, &header, &entries_offset)) {
+        state->failed = true;
+        return false;
+    }
+    if (!bc_hrbl_yaml_emit_mapping_start(state)) {
+        return false;
+    }
+    bool sort_keys = state->options != NULL ? state->options->sort_keys : true;
+    bc_hrbl_yaml_sort_entry_t* entries = NULL;
+    if (header.child_count != 0u) {
+        entries = (bc_hrbl_yaml_sort_entry_t*)malloc((size_t)header.child_count * sizeof(*entries));
+        if (entries == NULL) {
+            state->failed = true;
+            return false;
+        }
+        for (uint32_t i = 0u; i < header.child_count; i += 1u) {
+            bc_hrbl_entry_t raw;
+            memcpy(&raw, &state->reader->base[entries_offset + (uint64_t)i * BC_HRBL_BLOCK_ENTRY_SIZE], sizeof(raw));
+            entries[i].key_pool_offset = raw.key_pool_offset;
+            entries[i].key_length = raw.key_length;
+            entries[i].value_offset = raw.value_offset;
+        }
+        if (sort_keys) {
+            qsort_r(entries, header.child_count, sizeof(*entries), bc_hrbl_yaml_sort_by_key, (void*)state->reader);
+        }
+    }
+    for (uint32_t i = 0u; i < header.child_count; i += 1u) {
+        const char* key_data = (const char*)&state->reader->base[(size_t)entries[i].key_pool_offset + sizeof(uint32_t)];
+        if (!bc_hrbl_yaml_emit_scalar_double_quoted(state, key_data, (size_t)entries[i].key_length)) {
+            free(entries);
+            return false;
+        }
+        if (!bc_hrbl_yaml_emit_value(state, entries[i].value_offset)) {
+            free(entries);
+            return false;
+        }
+    }
+    free(entries);
+    return bc_hrbl_yaml_emit_mapping_end(state);
+}
+
+static bool bc_hrbl_yaml_emit_array(bc_hrbl_yaml_state_t* state, uint64_t array_offset)
+{
+    bc_hrbl_array_header_t header;
+    uint64_t elements_offset = 0u;
+    if (!bc_hrbl_reader_array_body_offsets(state->reader, array_offset, &header, &elements_offset)) {
+        state->failed = true;
+        return false;
+    }
+    if (!bc_hrbl_yaml_emit_sequence_start(state)) {
+        return false;
+    }
+    for (uint32_t i = 0u; i < header.element_count; i += 1u) {
+        uint64_t value_offset = 0u;
+        memcpy(&value_offset, &state->reader->base[elements_offset + (uint64_t)i * BC_HRBL_ARRAY_ELEMENT_SIZE],
+               sizeof(value_offset));
+        if (!bc_hrbl_yaml_emit_value(state, value_offset)) {
+            return false;
+        }
+    }
+    return bc_hrbl_yaml_emit_sequence_end(state);
+}
+
+static bool bc_hrbl_yaml_emit_value(bc_hrbl_yaml_state_t* state, uint64_t value_offset)
+{
+    bc_hrbl_kind_t kind;
+    if (!bc_hrbl_reader_kind_at(state->reader, value_offset, &kind)) {
+        state->failed = true;
+        return false;
+    }
+    char buffer[64];
+    switch (kind) {
+    case BC_HRBL_KIND_NULL:
+        return bc_hrbl_yaml_emit_scalar_str(state, "null", 4u);
+    case BC_HRBL_KIND_FALSE:
+        return bc_hrbl_yaml_emit_scalar_str(state, "false", 5u);
+    case BC_HRBL_KIND_TRUE:
+        return bc_hrbl_yaml_emit_scalar_str(state, "true", 4u);
+    case BC_HRBL_KIND_INT64: {
+        int64_t v = 0;
+        if (!bc_hrbl_reader_scalar_int64_at(state->reader, value_offset, &v)) {
+            state->failed = true;
+            return false;
+        }
+        int n = snprintf(buffer, sizeof(buffer), "%" PRId64, v);
+        if (n < 0) {
+            state->failed = true;
+            return false;
+        }
+        return bc_hrbl_yaml_emit_scalar_str(state, buffer, (size_t)n);
+    }
+    case BC_HRBL_KIND_UINT64: {
+        uint64_t v = 0u;
+        if (!bc_hrbl_reader_scalar_uint64_at(state->reader, value_offset, &v)) {
+            state->failed = true;
+            return false;
+        }
+        int n = snprintf(buffer, sizeof(buffer), "%" PRIu64, v);
+        if (n < 0) {
+            state->failed = true;
+            return false;
+        }
+        return bc_hrbl_yaml_emit_scalar_str(state, buffer, (size_t)n);
+    }
+    case BC_HRBL_KIND_FLOAT64: {
+        double v = 0.0;
+        if (!bc_hrbl_reader_scalar_float64_at(state->reader, value_offset, &v)) {
+            state->failed = true;
+            return false;
+        }
+        if (isnan(v)) {
+            return bc_hrbl_yaml_emit_scalar_str(state, ".nan", 4u);
+        }
+        if (isinf(v)) {
+            return bc_hrbl_yaml_emit_scalar_str(state, v < 0.0 ? "-.inf" : ".inf", v < 0.0 ? 5u : 4u);
+        }
+        int n = snprintf(buffer, sizeof(buffer), "%.17g", v);
+        if (n < 0) {
+            state->failed = true;
+            return false;
+        }
+        return bc_hrbl_yaml_emit_scalar_str(state, buffer, (size_t)n);
+    }
+    case BC_HRBL_KIND_STRING: {
+        const char* data = NULL;
+        size_t length = 0u;
+        if (!bc_hrbl_reader_scalar_string_at(state->reader, value_offset, &data, &length)) {
+            state->failed = true;
+            return false;
+        }
+        return bc_hrbl_yaml_emit_scalar_double_quoted(state, data, length);
+    }
+    case BC_HRBL_KIND_BLOCK:
+        return bc_hrbl_yaml_emit_block(state, value_offset);
+    case BC_HRBL_KIND_ARRAY:
+        return bc_hrbl_yaml_emit_array(state, value_offset);
+    }
+    state->failed = true;
+    return false;
+}
+
+bool bc_hrbl_export_yaml(const bc_hrbl_reader_t* reader, FILE* stream)
+{
+    return bc_hrbl_export_yaml_ex(reader, stream, NULL);
+}
+
+bool bc_hrbl_export_yaml_ex(const bc_hrbl_reader_t* reader, FILE* stream, const bc_hrbl_export_options_t* options)
+{
+    if (reader == NULL || stream == NULL) {
+        return false;
+    }
+    bc_hrbl_yaml_state_t state;
+    state.stream = stream;
+    state.reader = reader;
+    state.options = options;
+    state.failed = false;
+
+    if (yaml_emitter_initialize(&state.emitter) == 0) {
+        return false;
+    }
+    yaml_emitter_set_output(&state.emitter, bc_hrbl_yaml_write_handler, &state);
+    yaml_emitter_set_width(&state.emitter, -1);
+    yaml_emitter_set_unicode(&state.emitter, options != NULL ? options->ascii_only == false : 1);
+
+    yaml_event_t event;
+    yaml_stream_start_event_initialize(&event, YAML_UTF8_ENCODING);
+    if (yaml_emitter_emit(&state.emitter, &event) == 0) {
+        yaml_emitter_delete(&state.emitter);
+        return false;
+    }
+    yaml_document_start_event_initialize(&event, NULL, NULL, NULL, 1);
+    if (yaml_emitter_emit(&state.emitter, &event) == 0) {
+        yaml_emitter_delete(&state.emitter);
+        return false;
+    }
+
+    uint64_t root_count = reader->header->root_count;
+    bool ok = true;
+    if (root_count == 0u) {
+        yaml_event_t empty;
+        yaml_mapping_start_event_initialize(&empty, NULL, NULL, 1, YAML_BLOCK_MAPPING_STYLE);
+        if (yaml_emitter_emit(&state.emitter, &empty) == 0) {
+            yaml_emitter_delete(&state.emitter);
+            return false;
+        }
+        yaml_mapping_end_event_initialize(&empty);
+        if (yaml_emitter_emit(&state.emitter, &empty) == 0) {
+            yaml_emitter_delete(&state.emitter);
+            return false;
+        }
+    } else {
+        bool sort_keys = options != NULL ? options->sort_keys : true;
+        bc_hrbl_yaml_sort_entry_t* entries = (bc_hrbl_yaml_sort_entry_t*)malloc((size_t)root_count * sizeof(*entries));
+        if (entries == NULL) {
+            yaml_emitter_delete(&state.emitter);
+            return false;
+        }
+        for (uint64_t i = 0u; i < root_count; i += 1u) {
+            bc_hrbl_entry_t raw;
+            memcpy(&raw, &reader->base[reader->header->root_index_offset + i * BC_HRBL_ROOT_ENTRY_SIZE], sizeof(raw));
+            entries[i].key_pool_offset = raw.key_pool_offset;
+            entries[i].key_length = raw.key_length;
+            entries[i].value_offset = raw.value_offset;
+        }
+        if (sort_keys) {
+            qsort_r(entries, (size_t)root_count, sizeof(*entries), bc_hrbl_yaml_sort_by_key, (void*)reader);
+        }
+        if (!bc_hrbl_yaml_emit_mapping_start(&state)) {
+            free(entries);
+            yaml_emitter_delete(&state.emitter);
+            return false;
+        }
+        for (uint64_t i = 0u; i < root_count && ok; i += 1u) {
+            const char* key_data = (const char*)&reader->base[(size_t)entries[i].key_pool_offset + sizeof(uint32_t)];
+            if (!bc_hrbl_yaml_emit_scalar_double_quoted(&state, key_data, (size_t)entries[i].key_length)) {
+                ok = false;
+                break;
+            }
+            if (!bc_hrbl_yaml_emit_value(&state, entries[i].value_offset)) {
+                ok = false;
+                break;
+            }
+        }
+        free(entries);
+        if (!bc_hrbl_yaml_emit_mapping_end(&state)) {
+            ok = false;
+        }
+    }
+
+    yaml_document_end_event_initialize(&event, 1);
+    if (yaml_emitter_emit(&state.emitter, &event) == 0) {
+        ok = false;
+    }
+    yaml_stream_end_event_initialize(&event);
+    if (yaml_emitter_emit(&state.emitter, &event) == 0) {
+        ok = false;
+    }
+    yaml_emitter_flush(&state.emitter);
+    yaml_emitter_delete(&state.emitter);
+    return ok && !state.failed;
+}

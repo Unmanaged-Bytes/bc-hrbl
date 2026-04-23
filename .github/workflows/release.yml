@@ -45,8 +45,8 @@ jobs:
             apt-get update
             apt-get install -y --no-install-recommends \
                 debhelper meson ninja-build pkg-config \
-                libcmocka-dev libxxhash-dev build-essential devscripts \
-                ca-certificates
+                libcmocka-dev libxxhash-dev libjson-c-dev libyaml-dev \
+                build-essential devscripts ca-certificates
 
             apt-get install -y --no-install-recommends ./deps/*.deb
 

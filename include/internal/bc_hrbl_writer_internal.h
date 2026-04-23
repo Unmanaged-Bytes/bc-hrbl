@@ -15,11 +15,16 @@
 
 typedef struct bc_hrbl_writer_node bc_hrbl_writer_node_t;
 
+#define BC_HRBL_WRITER_POOL_OFFSET_NONE UINT32_C(0xFFFFFFFF)
+#define BC_HRBL_WRITER_STRING_OFFSET_NONE UINT32_C(0xFFFFFFFF)
+
 struct bc_hrbl_writer_node {
     bc_hrbl_kind_t               kind;
     uint32_t                     key_length;
     const char*                  key_data;
     uint64_t                     key_hash64;
+    uint32_t                     cached_key_pool_offset;
+    uint32_t                     cached_string_pool_offset;
     uint32_t                     child_count;
     uint32_t                     reserved;
     bc_hrbl_writer_node_t*       parent;
