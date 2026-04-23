@@ -571,17 +571,17 @@ bool bc_hrbl_reader_resolve_path(const bc_hrbl_reader_t* reader, const char* pat
             if (close >= path_length) {
                 return false;
             }
-            char number_buffer[32];
             size_t number_length = close - (cursor + 1u);
-            if (number_length == 0u || number_length >= sizeof(number_buffer)) {
+            if (number_length == 0u || number_length > 10u) {
                 return false;
             }
-            (void)bc_core_copy(number_buffer, &path[cursor + 1u], number_length);
-            number_buffer[number_length] = '\0';
-            char* end_ptr = NULL;
-            unsigned long long index = strtoull(number_buffer, &end_ptr, 10);
-            if (end_ptr == number_buffer || *end_ptr != '\0') {
-                return false;
+            uint64_t index = 0u;
+            for (size_t digit_position = 0u; digit_position < number_length; digit_position += 1u) {
+                char digit_char = path[cursor + 1u + digit_position];
+                if (digit_char < '0' || digit_char > '9') {
+                    return false;
+                }
+                index = index * 10u + (uint64_t)(digit_char - '0');
             }
             if (index > UINT32_MAX) {
                 return false;
