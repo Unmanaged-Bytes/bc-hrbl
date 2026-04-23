@@ -126,7 +126,26 @@ typedef struct bc_hrbl_encoder_pool {
     size_t                          slots_capacity;
     size_t                          slots_mask;
     size_t                          slots_used;
+    uint64_t*                       fixup_offsets;
+    size_t                          fixup_count;
+    size_t                          fixup_capacity;
 } bc_hrbl_encoder_pool_t;
+
+static bool bc_hrbl_encoder_pool_record_fixup(bc_hrbl_encoder_pool_t* pool, uint64_t node_offset)
+{
+    if (pool->fixup_count == pool->fixup_capacity) {
+        size_t new_capacity = pool->fixup_capacity == 0u ? 1024u : pool->fixup_capacity * 2u;
+        void* pointer = NULL;
+        if (!bc_allocators_pool_reallocate(pool->memory_context, pool->fixup_offsets, new_capacity * sizeof(uint64_t), &pointer)) {
+            return false;
+        }
+        pool->fixup_offsets = (uint64_t*)pointer;
+        pool->fixup_capacity = new_capacity;
+    }
+    pool->fixup_offsets[pool->fixup_count] = node_offset;
+    pool->fixup_count += 1u;
+    return true;
+}
 
 static uint64_t bc_hrbl_encoder_pool_mark(uint64_t raw_hash)
 {
@@ -146,6 +165,9 @@ static bool bc_hrbl_encoder_pool_init(bc_hrbl_encoder_pool_t* pool, bc_allocator
     pool->slots_capacity = 0u;
     pool->slots_mask = 0u;
     pool->slots_used = 0u;
+    pool->fixup_offsets = NULL;
+    pool->fixup_count = 0u;
+    pool->fixup_capacity = 0u;
     if (initial_capacity < 4096u) {
         initial_capacity = 4096u;
     }
@@ -170,10 +192,16 @@ static void bc_hrbl_encoder_pool_destroy(bc_hrbl_encoder_pool_t* pool)
         bc_allocators_pool_free(pool->memory_context, pool->entries);
         pool->entries = NULL;
     }
+    if (pool->fixup_offsets != NULL) {
+        bc_allocators_pool_free(pool->memory_context, pool->fixup_offsets);
+        pool->fixup_offsets = NULL;
+    }
     pool->entries_count = 0u;
     pool->entries_capacity = 0u;
     pool->slots_capacity = 0u;
     pool->slots_used = 0u;
+    pool->fixup_count = 0u;
+    pool->fixup_capacity = 0u;
 }
 
 static bool bc_hrbl_encoder_pool_slots_grow(bc_hrbl_encoder_pool_t* pool, size_t new_capacity)
@@ -461,7 +489,11 @@ static bool bc_hrbl_encoder_emit_scalar(bc_hrbl_encoder_buffer_t* nodes, bc_hrbl
         bc_hrbl_string_ref_t ref;
         ref.pool_offset = pool_offset_intra;
         ref.length = (uint32_t)length;
+        uint64_t string_ref_offset = (uint64_t)nodes->size;
         if (!bc_hrbl_encoder_buffer_append(nodes, &ref, sizeof(ref))) {
+            return false;
+        }
+        if (!bc_hrbl_encoder_pool_record_fixup(pool, string_ref_offset)) {
             return false;
         }
         break;
@@ -565,6 +597,11 @@ static bool bc_hrbl_encoder_emit_block(bc_hrbl_encoder_buffer_t* nodes, bc_hrbl_
         entry.key_length = pending[i].key_length;
         entry.value_offset = pending[i].value_offset;
         bc_hrbl_store_entry(entries_write + (size_t)i * BC_HRBL_BLOCK_ENTRY_SIZE, &entry);
+        uint64_t entry_buffer_offset = (uint64_t)entries_buffer_offset + (uint64_t)i * BC_HRBL_BLOCK_ENTRY_SIZE;
+        if (!bc_hrbl_encoder_pool_record_fixup(pool, entry_buffer_offset + (uint64_t)offsetof(bc_hrbl_entry_t, key_pool_offset))) {
+            bc_allocators_pool_free(pool->memory_context, pending);
+            return false;
+        }
     }
     if (pending != NULL) {
         bc_allocators_pool_free(pool->memory_context, pending);
@@ -638,109 +675,17 @@ static bool bc_hrbl_encoder_emit_value(bc_hrbl_encoder_buffer_t* nodes, bc_hrbl_
     return false;
 }
 
-static bool bc_hrbl_encoder_patch_pool_offsets(bc_hrbl_encoder_buffer_t* nodes, uint64_t nodes_offset, uint64_t strings_offset,
-                                               const uint64_t* root_value_offsets, uint64_t root_count,
-                                               bc_allocators_context_t* memory_context)
+static void bc_hrbl_encoder_apply_fixups(bc_hrbl_encoder_buffer_t* nodes, const bc_hrbl_encoder_pool_t* pool,
+                                         uint64_t strings_offset)
 {
-    size_t stack_capacity = 64u;
-    size_t stack_size = 0u;
-    void* stack_storage = NULL;
-    if (!bc_allocators_pool_allocate(memory_context, stack_capacity * sizeof(uint64_t), &stack_storage)) {
-        return false;
+    uint32_t delta = (uint32_t)strings_offset;
+    for (size_t i = 0u; i < pool->fixup_count; i += 1u) {
+        uint8_t* pointer = &nodes->data[pool->fixup_offsets[i]];
+        uint32_t value;
+        __builtin_memcpy(&value, pointer, sizeof(value));
+        value += delta;
+        __builtin_memcpy(pointer, &value, sizeof(value));
     }
-    uint64_t* stack = (uint64_t*)stack_storage;
-    for (uint64_t i = 0u; i < root_count; i += 1u) {
-        if (stack_size == stack_capacity) {
-            stack_capacity *= 2u;
-            void* grown = NULL;
-            if (!bc_allocators_pool_reallocate(memory_context, stack, stack_capacity * sizeof(uint64_t), &grown)) {
-                bc_allocators_pool_free(memory_context, stack);
-                return false;
-            }
-            stack = (uint64_t*)grown;
-        }
-        stack[stack_size] = root_value_offsets[i];
-        stack_size += 1u;
-    }
-    while (stack_size != 0u) {
-        stack_size -= 1u;
-        uint64_t absolute_offset = stack[stack_size];
-        if (absolute_offset < nodes_offset) {
-            continue;
-        }
-        size_t relative = (size_t)(absolute_offset - nodes_offset);
-        if (relative >= nodes->size) {
-            continue;
-        }
-        uint8_t kind = nodes->data[relative];
-        switch ((bc_hrbl_kind_t)kind) {
-        case BC_HRBL_KIND_NULL:
-        case BC_HRBL_KIND_FALSE:
-        case BC_HRBL_KIND_TRUE:
-        case BC_HRBL_KIND_INT64:
-        case BC_HRBL_KIND_UINT64:
-        case BC_HRBL_KIND_FLOAT64:
-            break;
-        case BC_HRBL_KIND_STRING: {
-            size_t body_offset = bc_hrbl_align_up(relative + 1u, 4u);
-            bc_hrbl_string_ref_t ref;
-            bc_hrbl_load_string_ref(&ref, &nodes->data[body_offset]);
-            ref.pool_offset = (uint32_t)(strings_offset + ref.pool_offset);
-            bc_hrbl_store_string_ref(&nodes->data[body_offset], &ref);
-            break;
-        }
-        case BC_HRBL_KIND_BLOCK: {
-            size_t body_offset = bc_hrbl_align_up(relative + 1u, 8u);
-            bc_hrbl_block_header_t block_header;
-            bc_hrbl_load_block_header(&block_header, &nodes->data[body_offset]);
-            size_t entries_offset = body_offset + sizeof(block_header);
-            for (uint32_t ei = 0u; ei < block_header.child_count; ei += 1u) {
-                size_t entry_offset = entries_offset + (size_t)ei * BC_HRBL_BLOCK_ENTRY_SIZE;
-                bc_hrbl_entry_t entry;
-                bc_hrbl_load_entry(&entry, &nodes->data[entry_offset]);
-                entry.key_pool_offset = (uint32_t)(strings_offset + entry.key_pool_offset);
-                bc_hrbl_store_entry(&nodes->data[entry_offset], &entry);
-                if (stack_size == stack_capacity) {
-                    stack_capacity *= 2u;
-                    void* grown = NULL;
-                    if (!bc_allocators_pool_reallocate(memory_context, stack, stack_capacity * sizeof(uint64_t), &grown)) {
-                        bc_allocators_pool_free(memory_context, stack);
-                        return false;
-                    }
-                    stack = (uint64_t*)grown;
-                }
-                stack[stack_size] = entry.value_offset;
-                stack_size += 1u;
-            }
-            break;
-        }
-        case BC_HRBL_KIND_ARRAY: {
-            size_t body_offset = bc_hrbl_align_up(relative + 1u, 8u);
-            bc_hrbl_array_header_t array_header;
-            bc_hrbl_load_array_header(&array_header, &nodes->data[body_offset]);
-            size_t offsets_offset = body_offset + sizeof(array_header);
-            for (uint32_t ei = 0u; ei < array_header.element_count; ei += 1u) {
-                size_t offset_location = offsets_offset + (size_t)ei * BC_HRBL_ARRAY_ELEMENT_SIZE;
-                uint64_t value_offset = 0u;
-                bc_hrbl_load_u64(&value_offset, &nodes->data[offset_location]);
-                if (stack_size == stack_capacity) {
-                    stack_capacity *= 2u;
-                    void* grown = NULL;
-                    if (!bc_allocators_pool_reallocate(memory_context, stack, stack_capacity * sizeof(uint64_t), &grown)) {
-                        bc_allocators_pool_free(memory_context, stack);
-                        return false;
-                    }
-                    stack = (uint64_t*)grown;
-                }
-                stack[stack_size] = value_offset;
-                stack_size += 1u;
-            }
-            break;
-        }
-        }
-    }
-    bc_allocators_pool_free(memory_context, stack);
-    return true;
 }
 
 bool bc_hrbl_writer_serialize_to_buffer(bc_hrbl_writer_t* writer, uint8_t** out_buffer, size_t* out_size)
@@ -840,33 +785,7 @@ bool bc_hrbl_writer_serialize_to_buffer(bc_hrbl_writer_t* writer, uint8_t** out_
         root_entries[i].key_pool_offset = (uint32_t)(strings_offset + relative);
     }
 
-    uint64_t* root_value_offsets = NULL;
-    if (root_count != 0u) {
-        void* pointer = NULL;
-        if (!bc_allocators_pool_allocate(memory_context, (size_t)root_count * sizeof(uint64_t), &pointer)) {
-            bc_allocators_pool_free(memory_context, root_entries);
-            bc_hrbl_encoder_buffer_destroy(&nodes_buffer);
-            bc_hrbl_encoder_pool_destroy(&pool);
-            return false;
-        }
-        root_value_offsets = (uint64_t*)pointer;
-        for (uint64_t i = 0u; i < root_count; i += 1u) {
-            root_value_offsets[i] = root_entries[i].value_offset;
-        }
-    }
-    if (!bc_hrbl_encoder_patch_pool_offsets(&nodes_buffer, nodes_offset, strings_offset, root_value_offsets, root_count,
-                                            memory_context)) {
-        if (root_value_offsets != NULL) {
-            bc_allocators_pool_free(memory_context, root_value_offsets);
-        }
-        bc_allocators_pool_free(memory_context, root_entries);
-        bc_hrbl_encoder_buffer_destroy(&nodes_buffer);
-        bc_hrbl_encoder_pool_destroy(&pool);
-        return false;
-    }
-    if (root_value_offsets != NULL) {
-        bc_allocators_pool_free(memory_context, root_value_offsets);
-    }
+    bc_hrbl_encoder_apply_fixups(&nodes_buffer, &pool, strings_offset);
 
     void* output_pointer = NULL;
     if (!bc_allocators_pool_allocate(memory_context, (size_t)file_size, &output_pointer)) {
