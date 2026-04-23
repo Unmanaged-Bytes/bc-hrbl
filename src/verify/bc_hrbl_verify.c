@@ -90,6 +90,9 @@ static bc_hrbl_verify_status_t bc_hrbl_verify_header_layout(const bc_hrbl_header
     if (header->root_index_offset != BC_HRBL_ROOT_INDEX_OFFSET) {
         return BC_HRBL_VERIFY_ERR_BAD_LAYOUT;
     }
+    if (header->root_count > BC_HRBL_ROOT_COUNT_MAX) {
+        return BC_HRBL_VERIFY_ERR_BAD_LAYOUT;
+    }
     if (header->root_index_size != header->root_count * BC_HRBL_ROOT_ENTRY_SIZE) {
         return BC_HRBL_VERIFY_ERR_BAD_LAYOUT;
     }

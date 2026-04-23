@@ -38,6 +38,9 @@ static bool bc_hrbl_reader_header_layout_valid(const bc_hrbl_header_t* header, s
     if (header->root_index_offset != BC_HRBL_ROOT_INDEX_OFFSET) {
         return false;
     }
+    if (header->root_count > BC_HRBL_ROOT_COUNT_MAX) {
+        return false;
+    }
     if (header->root_index_size != header->root_count * BC_HRBL_ROOT_ENTRY_SIZE) {
         return false;
     }

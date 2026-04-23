@@ -184,6 +184,19 @@ static void test_verify_bad_root_index_offset(void** state)
     assert_int_equal((int)bc_hrbl_verify_buffer(doc.bytes, sizeof(doc.bytes)), (int)BC_HRBL_VERIFY_ERR_BAD_LAYOUT);
 }
 
+static void test_verify_root_count_overflow_rejected(void** state)
+{
+    (void)state;
+    hrbl_empty_doc_t doc;
+    hrbl_make_empty_doc(&doc);
+
+    const uint64_t attacker_root_count = (uint64_t)1u << 61;
+    hrbl_write_u64(doc.bytes, 24u, attacker_root_count);
+
+    assert_int_equal((int)bc_hrbl_verify_buffer(doc.bytes, sizeof(doc.bytes)),
+                     (int)BC_HRBL_VERIFY_ERR_BAD_LAYOUT);
+}
+
 int main(void)
 {
     const struct CMUnitTest tests[] = {
@@ -201,6 +214,7 @@ int main(void)
         cmocka_unit_test(test_verify_footer_checksum_mismatch),
         cmocka_unit_test(test_verify_header_reserved_byte_set),
         cmocka_unit_test(test_verify_bad_root_index_offset),
+        cmocka_unit_test(test_verify_root_count_overflow_rejected),
     };
     return cmocka_run_group_tests(tests, NULL, NULL);
 }
