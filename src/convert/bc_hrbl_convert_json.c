@@ -4,6 +4,7 @@
 #include "bc_hrbl_writer.h"
 
 #include "bc_allocators.h"
+#include "bc_core_memory.h"
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -40,7 +41,10 @@ static bool bc_hrbl_convert_emit_object_body(bc_hrbl_writer_t* writer, struct js
     while (!json_object_iter_equal(&it, &end)) {
         const char* key = json_object_iter_peek_name(&it);
         struct json_object* value = json_object_iter_peek_value(&it);
-        size_t key_length = key != NULL ? strlen(key) : 0u;
+        size_t key_length = 0u;
+        if (key != NULL) {
+            (void)bc_core_length(key, '\0', &key_length);
+        }
         if (!bc_hrbl_convert_emit_value_keyed(writer, key, key_length, value, sink)) {
             return false;
         }

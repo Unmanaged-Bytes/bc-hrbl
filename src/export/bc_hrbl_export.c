@@ -59,7 +59,9 @@ static bool bc_hrbl_export_write_all(bc_hrbl_export_state_t* state, const char* 
 
 static bool bc_hrbl_export_write_literal(bc_hrbl_export_state_t* state, const char* literal)
 {
-    return bc_hrbl_export_write_all(state, literal, strlen(literal));
+    size_t length = 0u;
+    (void)bc_core_length(literal, '\0', &length);
+    return bc_hrbl_export_write_all(state, literal, length);
 }
 
 static bool bc_hrbl_export_write_indent(bc_hrbl_export_state_t* state, unsigned int depth)

@@ -60,7 +60,9 @@ static bool bc_hrbl_ini_write(bc_hrbl_ini_state_t* state, const char* data, size
 
 static bool bc_hrbl_ini_write_literal(bc_hrbl_ini_state_t* state, const char* literal)
 {
-    return bc_hrbl_ini_write(state, literal, strlen(literal));
+    size_t length = 0u;
+    (void)bc_core_length(literal, '\0', &length);
+    return bc_hrbl_ini_write(state, literal, length);
 }
 
 static bool bc_hrbl_ini_write_escaped(bc_hrbl_ini_state_t* state, const char* data, size_t length)
