@@ -12,9 +12,9 @@
 
 typedef struct bc_hrbl_convert_error {
     const char* message;
-    size_t      byte_offset;
-    uint32_t    line;
-    uint32_t    column;
+    size_t byte_offset;
+    uint32_t line;
+    uint32_t column;
 } bc_hrbl_convert_error_t;
 
 bool bc_hrbl_convert_json_to_writer(bc_hrbl_writer_t* writer, const char* json_text, size_t text_length,

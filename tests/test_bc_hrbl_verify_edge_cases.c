@@ -13,7 +13,7 @@
 
 #define HRBL_HEADER_SIZE 128u
 #define HRBL_FOOTER_SIZE 32u
-#define HRBL_MIN_SIZE    (HRBL_HEADER_SIZE + HRBL_FOOTER_SIZE)
+#define HRBL_MIN_SIZE (HRBL_HEADER_SIZE + HRBL_FOOTER_SIZE)
 
 typedef struct hrbl_empty_doc {
     uint8_t bytes[HRBL_MIN_SIZE];
@@ -38,20 +38,20 @@ static void hrbl_make_empty_doc(hrbl_empty_doc_t* out)
 {
     memset(out->bytes, 0, sizeof(out->bytes));
     uint8_t* b = out->bytes;
-    hrbl_write_u32(b,   0u, 0x4C425248u);
-    hrbl_write_u16(b,   4u, 1u);
-    hrbl_write_u16(b,   6u, 0u);
-    hrbl_write_u64(b,   8u, HRBL_MIN_SIZE);
-    hrbl_write_u64(b,  16u, (uint64_t)(0x1u | 0x2u | 0x4u | 0x8u));
-    hrbl_write_u64(b,  24u, 0u);
-    hrbl_write_u64(b,  32u, 128u);
-    hrbl_write_u64(b,  40u, 0u);
-    hrbl_write_u64(b,  48u, 128u);
-    hrbl_write_u64(b,  56u, 0u);
-    hrbl_write_u64(b,  64u, 128u);
-    hrbl_write_u64(b,  72u, 0u);
-    hrbl_write_u64(b,  80u, 0u);
-    hrbl_write_u64(b,  88u, 128u);
+    hrbl_write_u32(b, 0u, 0x4C425248u);
+    hrbl_write_u16(b, 4u, 1u);
+    hrbl_write_u16(b, 6u, 0u);
+    hrbl_write_u64(b, 8u, HRBL_MIN_SIZE);
+    hrbl_write_u64(b, 16u, (uint64_t)(0x1u | 0x2u | 0x4u | 0x8u));
+    hrbl_write_u64(b, 24u, 0u);
+    hrbl_write_u64(b, 32u, 128u);
+    hrbl_write_u64(b, 40u, 0u);
+    hrbl_write_u64(b, 48u, 128u);
+    hrbl_write_u64(b, 56u, 0u);
+    hrbl_write_u64(b, 64u, 128u);
+    hrbl_write_u64(b, 72u, 0u);
+    hrbl_write_u64(b, 80u, 0u);
+    hrbl_write_u64(b, 88u, 128u);
 
     uint64_t checksum = (uint64_t)XXH3_64bits(b + 128u, 0u);
     hrbl_write_u64(b, 96u, checksum);
@@ -193,8 +193,7 @@ static void test_verify_root_count_overflow_rejected(void** state)
     const uint64_t attacker_root_count = (uint64_t)1u << 61;
     hrbl_write_u64(doc.bytes, 24u, attacker_root_count);
 
-    assert_int_equal((int)bc_hrbl_verify_buffer(doc.bytes, sizeof(doc.bytes)),
-                     (int)BC_HRBL_VERIFY_ERR_BAD_LAYOUT);
+    assert_int_equal((int)bc_hrbl_verify_buffer(doc.bytes, sizeof(doc.bytes)), (int)BC_HRBL_VERIFY_ERR_BAD_LAYOUT);
 }
 
 int main(void)

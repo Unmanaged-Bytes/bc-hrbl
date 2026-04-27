@@ -32,13 +32,13 @@ static void hrbl_write_u64(uint8_t* buffer, size_t offset, uint64_t value)
 }
 
 static void hrbl_finalize_header_and_footer(uint8_t* buffer, size_t file_size, uint64_t root_count, uint64_t root_index_size,
-                                            uint64_t nodes_offset, uint64_t nodes_size, uint64_t strings_offset,
-                                            uint64_t strings_count, uint64_t strings_size, uint64_t footer_offset)
+                                            uint64_t nodes_offset, uint64_t nodes_size, uint64_t strings_offset, uint64_t strings_count,
+                                            uint64_t strings_size, uint64_t footer_offset)
 {
-    hrbl_write_u32(buffer,  0u, 0x4C425248u);
-    hrbl_write_u16(buffer,  4u, 1u);
-    hrbl_write_u16(buffer,  6u, 0u);
-    hrbl_write_u64(buffer,  8u, file_size);
+    hrbl_write_u32(buffer, 0u, 0x4C425248u);
+    hrbl_write_u16(buffer, 4u, 1u);
+    hrbl_write_u16(buffer, 6u, 0u);
+    hrbl_write_u64(buffer, 8u, file_size);
     hrbl_write_u64(buffer, 16u, (uint64_t)(0x1u | 0x2u | 0x4u | 0x8u));
     hrbl_write_u64(buffer, 24u, root_count);
     hrbl_write_u64(buffer, 32u, 128u);
@@ -54,8 +54,8 @@ static void hrbl_finalize_header_and_footer(uint8_t* buffer, size_t file_size, u
     uint64_t checksum = (uint64_t)XXH3_64bits(buffer + 128u, payload_length);
     hrbl_write_u64(buffer, 96u, checksum);
 
-    hrbl_write_u64(buffer, footer_offset,       checksum);
-    hrbl_write_u64(buffer, footer_offset + 8u,  file_size);
+    hrbl_write_u64(buffer, footer_offset, checksum);
+    hrbl_write_u64(buffer, footer_offset + 8u, file_size);
     hrbl_write_u32(buffer, footer_offset + 16u, 0x4C425248u);
 }
 
@@ -134,8 +134,7 @@ static void test_reader_opens_int64_root(void** state)
     uint64_t value_offset = nodes_offset + kind_offset_relative;
     memcpy(&buffer[entry_offset + 16u], &value_offset, sizeof(value_offset));
 
-    hrbl_finalize_header_and_footer(buffer, file_size, 1u, 24u, nodes_offset, nodes_size, strings_offset, 1u, strings_size,
-                                    footer_offset);
+    hrbl_finalize_header_and_footer(buffer, file_size, 1u, 24u, nodes_offset, nodes_size, strings_offset, 1u, strings_size, footer_offset);
 
     assert_int_equal((int)bc_hrbl_verify_buffer(buffer, file_size), (int)BC_HRBL_VERIFY_OK);
 

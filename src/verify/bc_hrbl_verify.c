@@ -175,9 +175,8 @@ static bc_hrbl_verify_status_t bc_hrbl_verify_root_index(const uint8_t* data, co
         if (entry.value_offset < header->nodes_offset || entry.value_offset >= header->strings_offset) {
             return BC_HRBL_VERIFY_ERR_BAD_ROOT_INDEX;
         }
-        if ((uint64_t)entry.key_pool_offset < header->strings_offset
-            || (uint64_t)entry.key_pool_offset + sizeof(uint32_t) + entry.key_length
-                   > header->strings_offset + header->strings_size) {
+        if ((uint64_t)entry.key_pool_offset < header->strings_offset ||
+            (uint64_t)entry.key_pool_offset + sizeof(uint32_t) + entry.key_length > header->strings_offset + header->strings_size) {
             return BC_HRBL_VERIFY_ERR_BAD_ROOT_INDEX;
         }
     }
@@ -270,21 +269,36 @@ bc_hrbl_verify_status_t bc_hrbl_verify_file(const char* path)
 const char* bc_hrbl_verify_status_name(bc_hrbl_verify_status_t status)
 {
     switch (status) {
-    case BC_HRBL_VERIFY_OK:                 return "ok";
-    case BC_HRBL_VERIFY_ERR_TOO_SMALL:      return "too_small";
-    case BC_HRBL_VERIFY_ERR_BAD_MAGIC:      return "bad_magic";
-    case BC_HRBL_VERIFY_ERR_BAD_VERSION:    return "bad_version";
-    case BC_HRBL_VERIFY_ERR_BAD_FLAGS:      return "bad_flags";
-    case BC_HRBL_VERIFY_ERR_BAD_FILE_SIZE:  return "bad_file_size";
-    case BC_HRBL_VERIFY_ERR_BAD_FOOTER:     return "bad_footer";
-    case BC_HRBL_VERIFY_ERR_BAD_CHECKSUM:   return "bad_checksum";
-    case BC_HRBL_VERIFY_ERR_BAD_LAYOUT:     return "bad_layout";
-    case BC_HRBL_VERIFY_ERR_BAD_ROOT_INDEX: return "bad_root_index";
-    case BC_HRBL_VERIFY_ERR_BAD_NODE:       return "bad_node";
-    case BC_HRBL_VERIFY_ERR_BAD_STRING:     return "bad_string";
-    case BC_HRBL_VERIFY_ERR_BAD_UTF8:       return "bad_utf8";
-    case BC_HRBL_VERIFY_ERR_DUPLICATE_KEY:  return "duplicate_key";
-    case BC_HRBL_VERIFY_ERR_IO:             return "io_error";
+    case BC_HRBL_VERIFY_OK:
+        return "ok";
+    case BC_HRBL_VERIFY_ERR_TOO_SMALL:
+        return "too_small";
+    case BC_HRBL_VERIFY_ERR_BAD_MAGIC:
+        return "bad_magic";
+    case BC_HRBL_VERIFY_ERR_BAD_VERSION:
+        return "bad_version";
+    case BC_HRBL_VERIFY_ERR_BAD_FLAGS:
+        return "bad_flags";
+    case BC_HRBL_VERIFY_ERR_BAD_FILE_SIZE:
+        return "bad_file_size";
+    case BC_HRBL_VERIFY_ERR_BAD_FOOTER:
+        return "bad_footer";
+    case BC_HRBL_VERIFY_ERR_BAD_CHECKSUM:
+        return "bad_checksum";
+    case BC_HRBL_VERIFY_ERR_BAD_LAYOUT:
+        return "bad_layout";
+    case BC_HRBL_VERIFY_ERR_BAD_ROOT_INDEX:
+        return "bad_root_index";
+    case BC_HRBL_VERIFY_ERR_BAD_NODE:
+        return "bad_node";
+    case BC_HRBL_VERIFY_ERR_BAD_STRING:
+        return "bad_string";
+    case BC_HRBL_VERIFY_ERR_BAD_UTF8:
+        return "bad_utf8";
+    case BC_HRBL_VERIFY_ERR_DUPLICATE_KEY:
+        return "duplicate_key";
+    case BC_HRBL_VERIFY_ERR_IO:
+        return "io_error";
     }
     return "unknown";
 }

@@ -9,24 +9,22 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#define BC_HRBL_HEADER_SIZE         128u
-#define BC_HRBL_FOOTER_SIZE         32u
-#define BC_HRBL_ROOT_INDEX_OFFSET   128u
-#define BC_HRBL_ROOT_ENTRY_SIZE     24u
-#define BC_HRBL_BLOCK_ENTRY_SIZE    24u
-#define BC_HRBL_ARRAY_ELEMENT_SIZE  8u
+#define BC_HRBL_HEADER_SIZE 128u
+#define BC_HRBL_FOOTER_SIZE 32u
+#define BC_HRBL_ROOT_INDEX_OFFSET 128u
+#define BC_HRBL_ROOT_ENTRY_SIZE 24u
+#define BC_HRBL_BLOCK_ENTRY_SIZE 24u
+#define BC_HRBL_ARRAY_ELEMENT_SIZE 8u
 
-#define BC_HRBL_ROOT_COUNT_MAX      (UINT64_MAX / BC_HRBL_ROOT_ENTRY_SIZE)
+#define BC_HRBL_ROOT_COUNT_MAX (UINT64_MAX / BC_HRBL_ROOT_ENTRY_SIZE)
 
-#define BC_HRBL_FLAG_STRINGS_DEDUP       (UINT64_C(1) << 0)
-#define BC_HRBL_FLAG_KEYS_SORTED_HASH    (UINT64_C(1) << 1)
-#define BC_HRBL_FLAG_ROOTS_SORTED_HASH   (UINT64_C(1) << 2)
-#define BC_HRBL_FLAG_HAS_CHECKSUM        (UINT64_C(1) << 3)
-#define BC_HRBL_FLAGS_V1_REQUIRED        (BC_HRBL_FLAG_STRINGS_DEDUP \
-                                          | BC_HRBL_FLAG_KEYS_SORTED_HASH \
-                                          | BC_HRBL_FLAG_ROOTS_SORTED_HASH \
-                                          | BC_HRBL_FLAG_HAS_CHECKSUM)
-#define BC_HRBL_FLAGS_V1_RESERVED_MASK   (~BC_HRBL_FLAGS_V1_REQUIRED)
+#define BC_HRBL_FLAG_STRINGS_DEDUP (UINT64_C(1) << 0)
+#define BC_HRBL_FLAG_KEYS_SORTED_HASH (UINT64_C(1) << 1)
+#define BC_HRBL_FLAG_ROOTS_SORTED_HASH (UINT64_C(1) << 2)
+#define BC_HRBL_FLAG_HAS_CHECKSUM (UINT64_C(1) << 3)
+#define BC_HRBL_FLAGS_V1_REQUIRED                                                                                                          \
+    (BC_HRBL_FLAG_STRINGS_DEDUP | BC_HRBL_FLAG_KEYS_SORTED_HASH | BC_HRBL_FLAG_ROOTS_SORTED_HASH | BC_HRBL_FLAG_HAS_CHECKSUM)
+#define BC_HRBL_FLAGS_V1_RESERVED_MASK (~BC_HRBL_FLAGS_V1_REQUIRED)
 
 typedef struct bc_hrbl_header {
     uint32_t magic;
@@ -44,39 +42,39 @@ typedef struct bc_hrbl_header {
     uint64_t strings_count;
     uint64_t footer_offset;
     uint64_t checksum_xxh3_64;
-    uint8_t  reserved[24];
+    uint8_t reserved[24];
 } bc_hrbl_header_t;
 
 static_assert(sizeof(bc_hrbl_header_t) == BC_HRBL_HEADER_SIZE, "hrbl header must be 128 B");
-static_assert(offsetof(bc_hrbl_header_t, magic)             ==   0, "magic offset");
-static_assert(offsetof(bc_hrbl_header_t, version_major)     ==   4, "version_major offset");
-static_assert(offsetof(bc_hrbl_header_t, version_minor)     ==   6, "version_minor offset");
-static_assert(offsetof(bc_hrbl_header_t, file_size)         ==   8, "file_size offset");
-static_assert(offsetof(bc_hrbl_header_t, flags)             ==  16, "flags offset");
-static_assert(offsetof(bc_hrbl_header_t, root_count)        ==  24, "root_count offset");
-static_assert(offsetof(bc_hrbl_header_t, root_index_offset) ==  32, "root_index_offset offset");
-static_assert(offsetof(bc_hrbl_header_t, root_index_size)   ==  40, "root_index_size offset");
-static_assert(offsetof(bc_hrbl_header_t, nodes_offset)      ==  48, "nodes_offset offset");
-static_assert(offsetof(bc_hrbl_header_t, nodes_size)        ==  56, "nodes_size offset");
-static_assert(offsetof(bc_hrbl_header_t, strings_offset)    ==  64, "strings_offset offset");
-static_assert(offsetof(bc_hrbl_header_t, strings_size)      ==  72, "strings_size offset");
-static_assert(offsetof(bc_hrbl_header_t, strings_count)     ==  80, "strings_count offset");
-static_assert(offsetof(bc_hrbl_header_t, footer_offset)     ==  88, "footer_offset offset");
-static_assert(offsetof(bc_hrbl_header_t, checksum_xxh3_64)  ==  96, "checksum offset");
-static_assert(offsetof(bc_hrbl_header_t, reserved)          == 104, "reserved offset");
+static_assert(offsetof(bc_hrbl_header_t, magic) == 0, "magic offset");
+static_assert(offsetof(bc_hrbl_header_t, version_major) == 4, "version_major offset");
+static_assert(offsetof(bc_hrbl_header_t, version_minor) == 6, "version_minor offset");
+static_assert(offsetof(bc_hrbl_header_t, file_size) == 8, "file_size offset");
+static_assert(offsetof(bc_hrbl_header_t, flags) == 16, "flags offset");
+static_assert(offsetof(bc_hrbl_header_t, root_count) == 24, "root_count offset");
+static_assert(offsetof(bc_hrbl_header_t, root_index_offset) == 32, "root_index_offset offset");
+static_assert(offsetof(bc_hrbl_header_t, root_index_size) == 40, "root_index_size offset");
+static_assert(offsetof(bc_hrbl_header_t, nodes_offset) == 48, "nodes_offset offset");
+static_assert(offsetof(bc_hrbl_header_t, nodes_size) == 56, "nodes_size offset");
+static_assert(offsetof(bc_hrbl_header_t, strings_offset) == 64, "strings_offset offset");
+static_assert(offsetof(bc_hrbl_header_t, strings_size) == 72, "strings_size offset");
+static_assert(offsetof(bc_hrbl_header_t, strings_count) == 80, "strings_count offset");
+static_assert(offsetof(bc_hrbl_header_t, footer_offset) == 88, "footer_offset offset");
+static_assert(offsetof(bc_hrbl_header_t, checksum_xxh3_64) == 96, "checksum offset");
+static_assert(offsetof(bc_hrbl_header_t, reserved) == 104, "reserved offset");
 
 typedef struct bc_hrbl_footer {
     uint64_t checksum_xxh3_64;
     uint64_t file_size;
     uint32_t magic_end;
-    uint8_t  reserved[12];
+    uint8_t reserved[12];
 } bc_hrbl_footer_t;
 
 static_assert(sizeof(bc_hrbl_footer_t) == BC_HRBL_FOOTER_SIZE, "hrbl footer must be 32 B");
-static_assert(offsetof(bc_hrbl_footer_t, checksum_xxh3_64) ==  0, "footer checksum offset");
-static_assert(offsetof(bc_hrbl_footer_t, file_size)        ==  8, "footer file_size offset");
-static_assert(offsetof(bc_hrbl_footer_t, magic_end)        == 16, "footer magic_end offset");
-static_assert(offsetof(bc_hrbl_footer_t, reserved)         == 20, "footer reserved offset");
+static_assert(offsetof(bc_hrbl_footer_t, checksum_xxh3_64) == 0, "footer checksum offset");
+static_assert(offsetof(bc_hrbl_footer_t, file_size) == 8, "footer file_size offset");
+static_assert(offsetof(bc_hrbl_footer_t, magic_end) == 16, "footer magic_end offset");
+static_assert(offsetof(bc_hrbl_footer_t, reserved) == 20, "footer reserved offset");
 
 typedef struct bc_hrbl_entry {
     uint64_t key_hash64;
@@ -86,10 +84,10 @@ typedef struct bc_hrbl_entry {
 } bc_hrbl_entry_t;
 
 static_assert(sizeof(bc_hrbl_entry_t) == BC_HRBL_ROOT_ENTRY_SIZE, "hrbl entry must be 24 B");
-static_assert(offsetof(bc_hrbl_entry_t, key_hash64)      ==  0, "entry hash offset");
-static_assert(offsetof(bc_hrbl_entry_t, key_pool_offset) ==  8, "entry key_pool_offset offset");
-static_assert(offsetof(bc_hrbl_entry_t, key_length)      == 12, "entry key_length offset");
-static_assert(offsetof(bc_hrbl_entry_t, value_offset)    == 16, "entry value_offset offset");
+static_assert(offsetof(bc_hrbl_entry_t, key_hash64) == 0, "entry hash offset");
+static_assert(offsetof(bc_hrbl_entry_t, key_pool_offset) == 8, "entry key_pool_offset offset");
+static_assert(offsetof(bc_hrbl_entry_t, key_length) == 12, "entry key_length offset");
+static_assert(offsetof(bc_hrbl_entry_t, value_offset) == 16, "entry value_offset offset");
 
 typedef struct bc_hrbl_block_header {
     uint32_t child_count;

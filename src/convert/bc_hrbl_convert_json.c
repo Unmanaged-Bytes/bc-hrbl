@@ -28,13 +28,11 @@ static void bc_hrbl_convert_error_set(bc_hrbl_convert_error_t* sink, const char*
     sink->column = 0u;
 }
 
-static bool bc_hrbl_convert_emit_value_keyed(bc_hrbl_writer_t* writer, const char* key, size_t key_length,
-                                             struct json_object* value, bc_hrbl_convert_error_t* sink);
-static bool bc_hrbl_convert_emit_value_indexed(bc_hrbl_writer_t* writer, struct json_object* value,
-                                               bc_hrbl_convert_error_t* sink);
+static bool bc_hrbl_convert_emit_value_keyed(bc_hrbl_writer_t* writer, const char* key, size_t key_length, struct json_object* value,
+                                             bc_hrbl_convert_error_t* sink);
+static bool bc_hrbl_convert_emit_value_indexed(bc_hrbl_writer_t* writer, struct json_object* value, bc_hrbl_convert_error_t* sink);
 
-static bool bc_hrbl_convert_emit_object_body(bc_hrbl_writer_t* writer, struct json_object* object,
-                                             bc_hrbl_convert_error_t* sink)
+static bool bc_hrbl_convert_emit_object_body(bc_hrbl_writer_t* writer, struct json_object* object, bc_hrbl_convert_error_t* sink)
 {
     struct json_object_iterator it = json_object_iter_begin(object);
     struct json_object_iterator end = json_object_iter_end(object);
@@ -53,8 +51,7 @@ static bool bc_hrbl_convert_emit_object_body(bc_hrbl_writer_t* writer, struct js
     return true;
 }
 
-static bool bc_hrbl_convert_emit_array_body(bc_hrbl_writer_t* writer, struct json_object* array,
-                                            bc_hrbl_convert_error_t* sink)
+static bool bc_hrbl_convert_emit_array_body(bc_hrbl_writer_t* writer, struct json_object* array, bc_hrbl_convert_error_t* sink)
 {
     size_t length = json_object_array_length(array);
     for (size_t i = 0u; i < length; i += 1u) {
@@ -66,8 +63,8 @@ static bool bc_hrbl_convert_emit_array_body(bc_hrbl_writer_t* writer, struct jso
     return true;
 }
 
-static bool bc_hrbl_convert_emit_number_keyed(bc_hrbl_writer_t* writer, const char* key, size_t key_length,
-                                              struct json_object* value, bc_hrbl_convert_error_t* sink)
+static bool bc_hrbl_convert_emit_number_keyed(bc_hrbl_writer_t* writer, const char* key, size_t key_length, struct json_object* value,
+                                              bc_hrbl_convert_error_t* sink)
 {
     enum json_type type = json_object_get_type(value);
     if (type == json_type_int) {
@@ -88,8 +85,7 @@ static bool bc_hrbl_convert_emit_number_keyed(bc_hrbl_writer_t* writer, const ch
     return false;
 }
 
-static bool bc_hrbl_convert_emit_number_indexed(bc_hrbl_writer_t* writer, struct json_object* value,
-                                                bc_hrbl_convert_error_t* sink)
+static bool bc_hrbl_convert_emit_number_indexed(bc_hrbl_writer_t* writer, struct json_object* value, bc_hrbl_convert_error_t* sink)
 {
     enum json_type type = json_object_get_type(value);
     if (type == json_type_int) {
@@ -110,8 +106,8 @@ static bool bc_hrbl_convert_emit_number_indexed(bc_hrbl_writer_t* writer, struct
     return false;
 }
 
-static bool bc_hrbl_convert_emit_value_keyed(bc_hrbl_writer_t* writer, const char* key, size_t key_length,
-                                             struct json_object* value, bc_hrbl_convert_error_t* sink)
+static bool bc_hrbl_convert_emit_value_keyed(bc_hrbl_writer_t* writer, const char* key, size_t key_length, struct json_object* value,
+                                             bc_hrbl_convert_error_t* sink)
 {
     if (value == NULL) {
         return bc_hrbl_writer_set_null(writer, key, key_length);
@@ -165,8 +161,7 @@ static bool bc_hrbl_convert_emit_value_keyed(bc_hrbl_writer_t* writer, const cha
     return false;
 }
 
-static bool bc_hrbl_convert_emit_value_indexed(bc_hrbl_writer_t* writer, struct json_object* value,
-                                               bc_hrbl_convert_error_t* sink)
+static bool bc_hrbl_convert_emit_value_indexed(bc_hrbl_writer_t* writer, struct json_object* value, bc_hrbl_convert_error_t* sink)
 {
     if (value == NULL) {
         return bc_hrbl_writer_append_null(writer);
@@ -220,8 +215,7 @@ static bool bc_hrbl_convert_emit_value_indexed(bc_hrbl_writer_t* writer, struct 
     return false;
 }
 
-bool bc_hrbl_convert_json_to_writer(bc_hrbl_writer_t* writer, const char* json_text, size_t text_length,
-                                    bc_hrbl_convert_error_t* out_error)
+bool bc_hrbl_convert_json_to_writer(bc_hrbl_writer_t* writer, const char* json_text, size_t text_length, bc_hrbl_convert_error_t* out_error)
 {
     if (out_error != NULL) {
         out_error->message = NULL;

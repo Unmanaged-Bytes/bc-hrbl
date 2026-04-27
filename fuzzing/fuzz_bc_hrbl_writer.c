@@ -7,23 +7,23 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define OP_SET_NULL   0x00
-#define OP_SET_BOOL   0x01
-#define OP_SET_INT    0x02
-#define OP_SET_UINT   0x03
-#define OP_SET_FLOAT  0x04
+#define OP_SET_NULL 0x00
+#define OP_SET_BOOL 0x01
+#define OP_SET_INT 0x02
+#define OP_SET_UINT 0x03
+#define OP_SET_FLOAT 0x04
 #define OP_SET_STRING 0x05
-#define OP_BEGIN_BLK  0x06
-#define OP_END_BLK    0x07
-#define OP_BEGIN_ARR  0x08
-#define OP_END_ARR    0x09
-#define OP_APP_NULL   0x0A
-#define OP_APP_BOOL   0x0B
-#define OP_APP_INT    0x0C
-#define OP_APP_UINT   0x0D
-#define OP_APP_FLOAT  0x0E
+#define OP_BEGIN_BLK 0x06
+#define OP_END_BLK 0x07
+#define OP_BEGIN_ARR 0x08
+#define OP_END_ARR 0x09
+#define OP_APP_NULL 0x0A
+#define OP_APP_BOOL 0x0B
+#define OP_APP_INT 0x0C
+#define OP_APP_UINT 0x0D
+#define OP_APP_FLOAT 0x0E
 #define OP_APP_STRING 0x0F
-#define OP_COUNT      0x10
+#define OP_COUNT 0x10
 
 #ifdef BC_FUZZ_LIBFUZZER
 int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size);
@@ -73,8 +73,12 @@ int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size)
         }
 
         switch (op) {
-        case 0x00: bc_hrbl_writer_set_null(writer, key_buf, key_length); break;
-        case 0x01: bc_hrbl_writer_set_bool(writer, key_buf, key_length, cursor < size ? data[cursor++] & 1u : false); break;
+        case 0x00:
+            bc_hrbl_writer_set_null(writer, key_buf, key_length);
+            break;
+        case 0x01:
+            bc_hrbl_writer_set_bool(writer, key_buf, key_length, cursor < size ? data[cursor++] & 1u : false);
+            break;
         case 0x02: {
             int64_t v = 0;
             if (cursor + 8u <= size) {
@@ -137,8 +141,12 @@ int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size)
                 depth -= 1u;
             }
             break;
-        case 0x0A: bc_hrbl_writer_append_null(writer); break;
-        case 0x0B: bc_hrbl_writer_append_bool(writer, cursor < size ? data[cursor++] & 1u : false); break;
+        case 0x0A:
+            bc_hrbl_writer_append_null(writer);
+            break;
+        case 0x0B:
+            bc_hrbl_writer_append_bool(writer, cursor < size ? data[cursor++] & 1u : false);
+            break;
         case 0x0C: {
             int64_t v = 0;
             if (cursor + 8u <= size) {
