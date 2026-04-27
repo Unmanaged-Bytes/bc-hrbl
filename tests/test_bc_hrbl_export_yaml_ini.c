@@ -3,6 +3,8 @@
 #include "bc_hrbl.h"
 #include "bc_allocators.h"
 
+#include <bc/bc_core_io.h>
+
 #include <stdarg.h>
 #include <stddef.h>
 #include <setjmp.h>
@@ -49,16 +51,24 @@ static void build_nested(bc_allocators_context_t* memory, void** out_buffer, siz
     bc_hrbl_writer_destroy(writer);
 }
 
-static char* capture(const bc_hrbl_reader_t* reader, bool (*export_fn)(const bc_hrbl_reader_t*, FILE*))
+static char* capture(const bc_hrbl_reader_t* reader, bool (*export_fn)(const bc_hrbl_reader_t*, bc_core_writer_t*))
 {
-    char* buffer = NULL;
-    size_t size = 0u;
-    FILE* stream = open_memstream(&buffer, &size);
-    assert_non_null(stream);
-    assert_true(export_fn(reader, stream));
-    fflush(stream);
-    fclose(stream);
-    return buffer;
+    /* Buffer-only writer so we can capture output without going through a file descriptor. */
+    static char sink_buffer[65536];
+    bc_core_writer_t writer;
+    assert_true(bc_core_writer_init_buffer_only(&writer, sink_buffer, sizeof(sink_buffer)));
+    assert_true(export_fn(reader, &writer));
+    const char* data = NULL;
+    size_t length = 0u;
+    assert_true(bc_core_writer_buffer_data(&writer, &data, &length));
+    char* result = (char*)malloc(length + 1u);
+    assert_non_null(result);
+    if (length != 0u) {
+        memcpy(result, data, length);
+    }
+    result[length] = '\0';
+    bc_core_writer_destroy(&writer);
+    return result;
 }
 
 static void test_yaml_simple(void** state)
