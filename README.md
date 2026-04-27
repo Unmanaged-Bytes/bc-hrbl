@@ -28,44 +28,6 @@ Binary configuration / manifest format:
   json-c. The binary format remains the source of truth; no
   text → .hrbl inverse parser outside JSON.
 
-## Requirements
-
-- Debian 13 (trixie) or any Linux distro with glibc ≥ 2.38
-- `meson >= 1.0`, `ninja-build`, `pkg-config`
-- `libbc-core-dev (>= 1.3.1)`, `libbc-allocators-dev (>= 1.2.0)`,
-  `libbc-io-dev (>= 1.1.1)`, `libbc-concurrency-dev (>= 1.1.1)`
-- `libxxhash-dev (>= 0.8.0)`
-- `libjson-c-dev (>= 0.15)`, `libyaml-dev (>= 0.2.0)`
-- `libcmocka-dev` (tests, optional for end users)
-
-## Build
-
-```
-meson setup build --buildtype=release
-meson compile -C build
-```
-
-Run the test suite:
-
-```
-meson setup build/debug --buildtype=debug -Dtests=true
-meson test -C build/debug
-```
-
-## Install
-
-```
-sudo meson install -C build
-pkg-config --cflags --libs bc-hrbl
-```
-
-The package installs:
-- Headers under `/usr/local/include/bc/` (`bc_hrbl.h`, `bc_hrbl_types.h`,
-  `bc_hrbl_reader.h`, `bc_hrbl_writer.h`, `bc_hrbl_verify.h`,
-  `bc_hrbl_export.h`, `bc_hrbl_convert.h`)
-- Static library at `/usr/local/lib/<multiarch>/libbc-hrbl.a`
-- pkg-config descriptor at `/usr/local/lib/<multiarch>/pkgconfig/bc-hrbl.pc`
-
 ## Quick start
 
 ```c
