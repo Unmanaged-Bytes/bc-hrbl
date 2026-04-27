@@ -273,13 +273,12 @@ static bool bc_hrbl_yaml_emit_value(bc_hrbl_yaml_state_t* state, uint64_t value_
         if (isinf(v)) {
             return bc_hrbl_yaml_emit_scalar_str(state, v < 0.0 ? "-.inf" : ".inf", v < 0.0 ? 5u : 4u);
         }
-        /* %.17g shortest-round-trip representation; bc_core_format_double has different padding semantics. */
-        int n = snprintf(buffer, sizeof(buffer), "%.17g", v);
-        if (n < 0) {
+        size_t n = 0;
+        if (!bc_core_format_double_shortest_round_trip(buffer, sizeof(buffer), v, &n)) {
             state->failed = true;
             return false;
         }
-        return bc_hrbl_yaml_emit_scalar_str(state, buffer, (size_t)n);
+        return bc_hrbl_yaml_emit_scalar_str(state, buffer, n);
     }
     case BC_HRBL_KIND_STRING: {
         const char* data = NULL;
