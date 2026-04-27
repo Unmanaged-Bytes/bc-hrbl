@@ -15,10 +15,10 @@
 
 struct bc_hrbl_reader {
     bc_allocators_context_t* memory_context;
-    bc_io_mmap_t*            mmap_handle;
-    const uint8_t*           base;
-    size_t                   size;
-    const bc_hrbl_header_t*  header;
+    bc_io_mmap_t* mmap_handle;
+    const uint8_t* base;
+    size_t size;
+    const bc_hrbl_header_t* header;
 };
 
 bool bc_hrbl_reader_root_at_offset(const bc_hrbl_reader_t* reader, uint64_t index, const char** out_key, uint32_t* out_key_length,
@@ -29,8 +29,8 @@ bool bc_hrbl_reader_find_root_offset(const bc_hrbl_reader_t* reader, const char*
 bool bc_hrbl_reader_kind_at(const bc_hrbl_reader_t* reader, uint64_t value_offset, bc_hrbl_kind_t* out_kind);
 
 bool bc_hrbl_reader_block_child_count_at(const bc_hrbl_reader_t* reader, uint64_t block_offset, uint32_t* out_count);
-bool bc_hrbl_reader_block_entry_at_offset(const bc_hrbl_reader_t* reader, uint64_t block_offset, uint32_t index,
-                                          const char** out_key, uint32_t* out_key_length, uint64_t* out_value_offset);
+bool bc_hrbl_reader_block_entry_at_offset(const bc_hrbl_reader_t* reader, uint64_t block_offset, uint32_t index, const char** out_key,
+                                          uint32_t* out_key_length, uint64_t* out_value_offset);
 bool bc_hrbl_reader_block_find_offset(const bc_hrbl_reader_t* reader, uint64_t block_offset, const char* key, size_t key_length,
                                       uint64_t* out_value_offset);
 
