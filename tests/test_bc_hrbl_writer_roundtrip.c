@@ -3,6 +3,8 @@
 #include "bc_hrbl.h"
 #include "bc_allocators.h"
 
+#include <bc/bc_core_io.h>
+
 #include <stdarg.h>
 #include <stddef.h>
 #include <setjmp.h>
@@ -46,17 +48,18 @@ static void test_writer_roundtrip_empty(void** state)
     bc_hrbl_reader_destroy(reader);
     bc_hrbl_writer_destroy(writer);
 
-    char* json = NULL;
-    size_t json_size = 0u;
-    FILE* stream = open_memstream(&json, &json_size);
-    assert_non_null(stream);
+    static char sink_empty[1024];
+    bc_core_writer_t writer_empty;
+    assert_true(bc_core_writer_init_buffer_only(&writer_empty, sink_empty, sizeof(sink_empty)));
     bc_hrbl_reader_t* reader_again = NULL;
     assert_true(bc_hrbl_reader_open_buffer(memory, buffer, size, &reader_again));
-    assert_true(bc_hrbl_export_json(reader_again, stream));
-    fflush(stream);
-    fclose(stream);
-    assert_string_equal(json, "{}\n");
-    free(json);
+    assert_true(bc_hrbl_export_json(reader_again, &writer_empty));
+    const char* empty_data = NULL;
+    size_t empty_length = 0u;
+    assert_true(bc_core_writer_buffer_data(&writer_empty, &empty_data, &empty_length));
+    assert_int_equal((int)empty_length, 3);
+    assert_memory_equal(empty_data, "{}\n", 3);
+    bc_core_writer_destroy(&writer_empty);
     bc_hrbl_reader_destroy(reader_again);
 
     bc_hrbl_free_buffer(memory, buffer);
@@ -176,31 +179,32 @@ static void test_writer_roundtrip_nested(void** state)
     assert_true(bc_hrbl_reader_get_int64(&value, &loaded));
     assert_true(loaded == 8080);
 
-    char* json = NULL;
-    size_t json_size = 0u;
-    FILE* stream = open_memstream(&json, &json_size);
-    assert_non_null(stream);
+    static char sink_full[4096];
+    bc_core_writer_t writer_full;
+    assert_true(bc_core_writer_init_buffer_only(&writer_full, sink_full, sizeof(sink_full)));
     bc_hrbl_export_options_t options;
     options.indent_spaces = 2u;
     options.sort_keys = true;
     options.ascii_only = false;
-    assert_true(bc_hrbl_export_json_ex(reader, stream, &options));
-    fflush(stream);
-    fclose(stream);
-    const char* expected =
-        "{\n"
-        "  \"ports\": [\n"
-        "    80,\n"
-        "    443,\n"
-        "    8080\n"
-        "  ],\n"
-        "  \"server\": {\n"
-        "    \"host\": \"localhost\",\n"
-        "    \"port\": 8080\n"
-        "  }\n"
-        "}\n";
-    assert_string_equal(json, expected);
-    free(json);
+    assert_true(bc_hrbl_export_json_ex(reader, &writer_full, &options));
+    const char* full_data = NULL;
+    size_t full_length = 0u;
+    assert_true(bc_core_writer_buffer_data(&writer_full, &full_data, &full_length));
+    const char* expected = "{\n"
+                           "  \"ports\": [\n"
+                           "    80,\n"
+                           "    443,\n"
+                           "    8080\n"
+                           "  ],\n"
+                           "  \"server\": {\n"
+                           "    \"host\": \"localhost\",\n"
+                           "    \"port\": 8080\n"
+                           "  }\n"
+                           "}\n";
+    size_t expected_length = strlen(expected);
+    assert_int_equal((int)full_length, (int)expected_length);
+    assert_memory_equal(full_data, expected, expected_length);
+    bc_core_writer_destroy(&writer_full);
 
     bc_hrbl_reader_destroy(reader);
     bc_hrbl_free_buffer(memory, buffer);

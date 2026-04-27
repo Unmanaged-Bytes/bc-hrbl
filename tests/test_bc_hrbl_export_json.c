@@ -3,6 +3,8 @@
 #include "bc_hrbl.h"
 #include "bc_allocators.h"
 
+#include <bc/bc_core_io.h>
+
 #include <stdarg.h>
 #include <stddef.h>
 #include <setjmp.h>
@@ -17,18 +19,27 @@
 #define HRBL_HEADER_SIZE 128u
 #define HRBL_FOOTER_SIZE 32u
 
-static void hrbl_write_u16(uint8_t* b, size_t off, uint16_t v) { memcpy(b + off, &v, sizeof(v)); }
-static void hrbl_write_u32(uint8_t* b, size_t off, uint32_t v) { memcpy(b + off, &v, sizeof(v)); }
-static void hrbl_write_u64(uint8_t* b, size_t off, uint64_t v) { memcpy(b + off, &v, sizeof(v)); }
+static void hrbl_write_u16(uint8_t* b, size_t off, uint16_t v)
+{
+    memcpy(b + off, &v, sizeof(v));
+}
+static void hrbl_write_u32(uint8_t* b, size_t off, uint32_t v)
+{
+    memcpy(b + off, &v, sizeof(v));
+}
+static void hrbl_write_u64(uint8_t* b, size_t off, uint64_t v)
+{
+    memcpy(b + off, &v, sizeof(v));
+}
 
 static void hrbl_finalize(uint8_t* buffer, size_t file_size, uint64_t root_count, uint64_t root_index_size, uint64_t nodes_offset,
                           uint64_t nodes_size, uint64_t strings_offset, uint64_t strings_count, uint64_t strings_size,
                           uint64_t footer_offset)
 {
-    hrbl_write_u32(buffer,  0u, 0x4C425248u);
-    hrbl_write_u16(buffer,  4u, 1u);
-    hrbl_write_u16(buffer,  6u, 0u);
-    hrbl_write_u64(buffer,  8u, file_size);
+    hrbl_write_u32(buffer, 0u, 0x4C425248u);
+    hrbl_write_u16(buffer, 4u, 1u);
+    hrbl_write_u16(buffer, 6u, 0u);
+    hrbl_write_u64(buffer, 8u, file_size);
     hrbl_write_u64(buffer, 16u, (uint64_t)(0x1u | 0x2u | 0x4u | 0x8u));
     hrbl_write_u64(buffer, 24u, root_count);
     hrbl_write_u64(buffer, 32u, 128u);
@@ -44,8 +55,8 @@ static void hrbl_finalize(uint8_t* buffer, size_t file_size, uint64_t root_count
     uint64_t checksum = (uint64_t)XXH3_64bits(buffer + 128u, payload_length);
     hrbl_write_u64(buffer, 96u, checksum);
 
-    hrbl_write_u64(buffer, footer_offset,       checksum);
-    hrbl_write_u64(buffer, footer_offset + 8u,  file_size);
+    hrbl_write_u64(buffer, footer_offset, checksum);
+    hrbl_write_u64(buffer, footer_offset + 8u, file_size);
     hrbl_write_u32(buffer, footer_offset + 16u, 0x4C425248u);
 }
 
@@ -60,15 +71,23 @@ static bc_allocators_context_t* make_memory(void)
 
 static char* capture_export(const bc_hrbl_reader_t* reader, const bc_hrbl_export_options_t* options)
 {
-    char* buffer = NULL;
-    size_t size = 0u;
-    FILE* stream = open_memstream(&buffer, &size);
-    assert_non_null(stream);
-    bool ok = (options != NULL) ? bc_hrbl_export_json_ex(reader, stream, options) : bc_hrbl_export_json(reader, stream);
+    /* Use a buffer-only writer (no fd) so we can capture output for byte-equivalence assertions. */
+    static char sink_buffer[65536];
+    bc_core_writer_t writer;
+    assert_true(bc_core_writer_init_buffer_only(&writer, sink_buffer, sizeof(sink_buffer)));
+    bool ok = (options != NULL) ? bc_hrbl_export_json_ex(reader, &writer, options) : bc_hrbl_export_json(reader, &writer);
     assert_true(ok);
-    fflush(stream);
-    fclose(stream);
-    return buffer;
+    const char* data = NULL;
+    size_t length = 0u;
+    assert_true(bc_core_writer_buffer_data(&writer, &data, &length));
+    char* result = (char*)malloc(length + 1u);
+    assert_non_null(result);
+    if (length != 0u) {
+        memcpy(result, data, length);
+    }
+    result[length] = '\0';
+    bc_core_writer_destroy(&writer);
+    return result;
 }
 
 static void test_export_empty_document(void** state)

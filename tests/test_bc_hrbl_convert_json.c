@@ -2,6 +2,8 @@
 
 #include "bc_hrbl.h"
 
+#include <bc/bc_core_io.h>
+
 #include <stdarg.h>
 #include <stddef.h>
 #include <setjmp.h>
@@ -22,18 +24,25 @@ static bc_allocators_context_t* make_memory(void)
 
 static char* export_to_string(const bc_hrbl_reader_t* reader)
 {
-    char* buffer = NULL;
-    size_t size = 0u;
-    FILE* stream = open_memstream(&buffer, &size);
-    assert_non_null(stream);
+    static char sink_buffer[65536];
+    bc_core_writer_t writer;
+    assert_true(bc_core_writer_init_buffer_only(&writer, sink_buffer, sizeof(sink_buffer)));
     bc_hrbl_export_options_t options;
     options.indent_spaces = 2u;
     options.sort_keys = true;
     options.ascii_only = false;
-    assert_true(bc_hrbl_export_json_ex(reader, stream, &options));
-    fflush(stream);
-    fclose(stream);
-    return buffer;
+    assert_true(bc_hrbl_export_json_ex(reader, &writer, &options));
+    const char* data = NULL;
+    size_t length = 0u;
+    assert_true(bc_core_writer_buffer_data(&writer, &data, &length));
+    char* result = (char*)malloc(length + 1u);
+    assert_non_null(result);
+    if (length != 0u) {
+        memcpy(result, data, length);
+    }
+    result[length] = '\0';
+    bc_core_writer_destroy(&writer);
+    return result;
 }
 
 static void test_convert_empty_object(void** state)
@@ -110,18 +119,17 @@ static void test_convert_nested_structure(void** state)
     assert_true(bc_hrbl_reader_open_buffer(memory, buffer, size, &reader));
 
     char* exported = export_to_string(reader);
-    const char* expected =
-        "{\n"
-        "  \"ports\": [\n"
-        "    80,\n"
-        "    443,\n"
-        "    8080\n"
-        "  ],\n"
-        "  \"server\": {\n"
-        "    \"host\": \"localhost\",\n"
-        "    \"port\": 8080\n"
-        "  }\n"
-        "}\n";
+    const char* expected = "{\n"
+                           "  \"ports\": [\n"
+                           "    80,\n"
+                           "    443,\n"
+                           "    8080\n"
+                           "  ],\n"
+                           "  \"server\": {\n"
+                           "    \"host\": \"localhost\",\n"
+                           "    \"port\": 8080\n"
+                           "  }\n"
+                           "}\n";
     assert_string_equal(exported, expected);
 
     free(exported);
@@ -171,13 +179,7 @@ static void test_convert_invalid_rejected(void** state)
     bc_allocators_context_t* memory = make_memory();
 
     const char* cases[] = {
-        "",
-        "[]",
-        "{",
-        "{\"key\":",
-        "{\"a\":1 extra}",
-        "{\"bad\":\"\\q\"}",
-        "{\"badnum\":1.",
+        "", "[]", "{", "{\"key\":", "{\"a\":1 extra}", "{\"bad\":\"\\q\"}", "{\"badnum\":1.",
     };
     for (size_t i = 0u; i < sizeof(cases) / sizeof(cases[0]); i += 1u) {
         void* buffer = NULL;
@@ -193,10 +195,8 @@ static void test_convert_invalid_rejected(void** state)
 int main(void)
 {
     const struct CMUnitTest tests[] = {
-        cmocka_unit_test(test_convert_empty_object),
-        cmocka_unit_test(test_convert_simple_object),
-        cmocka_unit_test(test_convert_nested_structure),
-        cmocka_unit_test(test_convert_unicode_escapes),
+        cmocka_unit_test(test_convert_empty_object),     cmocka_unit_test(test_convert_simple_object),
+        cmocka_unit_test(test_convert_nested_structure), cmocka_unit_test(test_convert_unicode_escapes),
         cmocka_unit_test(test_convert_invalid_rejected),
     };
     return cmocka_run_group_tests(tests, NULL, NULL);

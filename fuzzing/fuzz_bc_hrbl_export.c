@@ -3,6 +3,8 @@
 #include "bc_hrbl.h"
 #include "bc_allocators.h"
 
+#include <bc/bc_core_io.h>
+
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -24,32 +26,19 @@ int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size)
     }
     bc_hrbl_reader_t* reader = NULL;
     if (bc_hrbl_reader_open_buffer(memory, data, size, &reader)) {
-        char* sink = NULL;
-        size_t sink_size = 0u;
-        FILE* stream = open_memstream(&sink, &sink_size);
-        if (stream != NULL) {
-            (void)bc_hrbl_export_json(reader, stream);
-            fflush(stream);
-            fclose(stream);
-            free(sink);
+        static char sink[1u << 20];
+        bc_core_writer_t writer;
+        if (bc_core_writer_init_buffer_only(&writer, sink, sizeof(sink))) {
+            (void)bc_hrbl_export_json(reader, &writer);
+            bc_core_writer_destroy(&writer);
         }
-        sink = NULL;
-        sink_size = 0u;
-        stream = open_memstream(&sink, &sink_size);
-        if (stream != NULL) {
-            (void)bc_hrbl_export_yaml(reader, stream);
-            fflush(stream);
-            fclose(stream);
-            free(sink);
+        if (bc_core_writer_init_buffer_only(&writer, sink, sizeof(sink))) {
+            (void)bc_hrbl_export_yaml(reader, &writer);
+            bc_core_writer_destroy(&writer);
         }
-        sink = NULL;
-        sink_size = 0u;
-        stream = open_memstream(&sink, &sink_size);
-        if (stream != NULL) {
-            (void)bc_hrbl_export_ini(reader, stream);
-            fflush(stream);
-            fclose(stream);
-            free(sink);
+        if (bc_core_writer_init_buffer_only(&writer, sink, sizeof(sink))) {
+            (void)bc_hrbl_export_ini(reader, &writer);
+            bc_core_writer_destroy(&writer);
         }
         bc_hrbl_reader_destroy(reader);
     }

@@ -8,17 +8,16 @@
 #include "bc_allocators.h"
 #include "bc_allocators_pool.h"
 #include "bc_core.h"
+#include "bc_core_format.h"
+#include "bc_core_io.h"
 #include "bc_core_memory.h"
+#include "bc_core_sort.h"
 
-#include <inttypes.h>
 #include <math.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-
 
 static void* bc_hrbl_export_scratch_alloc(bc_allocators_context_t* memory_context, size_t bytes)
 {
@@ -37,10 +36,10 @@ static void bc_hrbl_export_scratch_free(bc_allocators_context_t* memory_context,
     bc_allocators_pool_free(memory_context, pointer);
 }
 typedef struct bc_hrbl_ini_state {
-    FILE*                           stream;
-    const bc_hrbl_reader_t*         reader;
+    bc_core_writer_t* writer;
+    const bc_hrbl_reader_t* reader;
     const bc_hrbl_export_options_t* options;
-    bool                            failed;
+    bool failed;
 } bc_hrbl_ini_state_t;
 
 static bool bc_hrbl_ini_write(bc_hrbl_ini_state_t* state, const char* data, size_t length)
@@ -51,7 +50,7 @@ static bool bc_hrbl_ini_write(bc_hrbl_ini_state_t* state, const char* data, size
     if (length == 0u) {
         return true;
     }
-    if (fwrite(data, 1u, length, state->stream) != length) {
+    if (!bc_core_writer_write_bytes(state->writer, data, length)) {
         state->failed = true;
         return false;
     }
@@ -76,12 +75,28 @@ static bool bc_hrbl_ini_write_escaped(bc_hrbl_ini_state_t* state, const char* da
         const char* chunk = NULL;
         size_t chunk_length = 0u;
         switch (c) {
-        case '\\': chunk = "\\\\"; chunk_length = 2u; break;
-        case '"':  chunk = "\\\""; chunk_length = 2u; break;
-        case '\n': chunk = "\\n";  chunk_length = 2u; break;
-        case '\r': chunk = "\\r";  chunk_length = 2u; break;
-        case '\t': chunk = "\\t";  chunk_length = 2u; break;
-        default:   break;
+        case '\\':
+            chunk = "\\\\";
+            chunk_length = 2u;
+            break;
+        case '"':
+            chunk = "\\\"";
+            chunk_length = 2u;
+            break;
+        case '\n':
+            chunk = "\\n";
+            chunk_length = 2u;
+            break;
+        case '\r':
+            chunk = "\\r";
+            chunk_length = 2u;
+            break;
+        case '\t':
+            chunk = "\\t";
+            chunk_length = 2u;
+            break;
+        default:
+            break;
         }
         if (chunk != NULL) {
             if (!bc_hrbl_ini_write(state, chunk, chunk_length)) {
@@ -90,13 +105,23 @@ static bool bc_hrbl_ini_write_escaped(bc_hrbl_ini_state_t* state, const char* da
             continue;
         }
         if (c < 0x20u) {
-            char buf[8];
-            int n = snprintf(buf, sizeof(buf), "\\x%02X", (unsigned int)c);
-            if (n < 0) {
+            char hex_buffer[2];
+            size_t hex_length = 0u;
+            if (!bc_core_format_unsigned_integer_64_hexadecimal_padded(hex_buffer, sizeof(hex_buffer), (uint64_t)c, 2u, &hex_length)) {
                 state->failed = true;
                 return false;
             }
-            if (!bc_hrbl_ini_write(state, buf, (size_t)n)) {
+            /* bc_core_format hex output is lowercase; legacy "\\x%02X" was uppercase. */
+            for (size_t k = 0u; k < hex_length; k += 1u) {
+                char ch = hex_buffer[k];
+                if (ch >= 'a' && ch <= 'f') {
+                    hex_buffer[k] = (char)(ch - ('a' - 'A'));
+                }
+            }
+            if (!bc_hrbl_ini_write_literal(state, "\\x")) {
+                return false;
+            }
+            if (!bc_hrbl_ini_write(state, hex_buffer, hex_length)) {
                 return false;
             }
             continue;
@@ -130,8 +155,12 @@ static bool bc_hrbl_ini_write_scalar_value(bc_hrbl_ini_state_t* state, uint64_t 
             state->failed = true;
             return false;
         }
-        int n = snprintf(buffer, sizeof(buffer), "%" PRId64, v);
-        return n >= 0 && bc_hrbl_ini_write(state, buffer, (size_t)n);
+        size_t formatted = 0u;
+        if (!bc_core_format_signed_integer_64(buffer, sizeof(buffer), v, &formatted)) {
+            state->failed = true;
+            return false;
+        }
+        return bc_hrbl_ini_write(state, buffer, formatted);
     }
     case BC_HRBL_KIND_UINT64: {
         uint64_t v = 0u;
@@ -139,8 +168,12 @@ static bool bc_hrbl_ini_write_scalar_value(bc_hrbl_ini_state_t* state, uint64_t 
             state->failed = true;
             return false;
         }
-        int n = snprintf(buffer, sizeof(buffer), "%" PRIu64, v);
-        return n >= 0 && bc_hrbl_ini_write(state, buffer, (size_t)n);
+        size_t formatted = 0u;
+        if (!bc_core_format_unsigned_integer_64_decimal(buffer, sizeof(buffer), v, &formatted)) {
+            state->failed = true;
+            return false;
+        }
+        return bc_hrbl_ini_write(state, buffer, formatted);
     }
     case BC_HRBL_KIND_FLOAT64: {
         double v = 0.0;
@@ -151,6 +184,7 @@ static bool bc_hrbl_ini_write_scalar_value(bc_hrbl_ini_state_t* state, uint64_t 
         if (isnan(v) || isinf(v)) {
             return bc_hrbl_ini_write_literal(state, "");
         }
+        /* %.17g shortest-round-trip; bc_core_format_double has different padding semantics. */
         int n = snprintf(buffer, sizeof(buffer), "%.17g", v);
         return n >= 0 && bc_hrbl_ini_write(state, buffer, (size_t)n);
     }
@@ -177,11 +211,11 @@ typedef struct bc_hrbl_ini_sort_entry {
 } bc_hrbl_ini_sort_entry_t;
 
 /* cppcheck-suppress [constParameterCallback] */
-static int bc_hrbl_ini_sort_by_key(const void* left, const void* right, void* cookie)
+static bool bc_hrbl_ini_sort_less_by_key(const void* left, const void* right, void* user_data)
 {
     const bc_hrbl_ini_sort_entry_t* a = (const bc_hrbl_ini_sort_entry_t*)left;
     const bc_hrbl_ini_sort_entry_t* b = (const bc_hrbl_ini_sort_entry_t*)right;
-    const bc_hrbl_reader_t* reader = (const bc_hrbl_reader_t*)cookie;
+    const bc_hrbl_reader_t* reader = (const bc_hrbl_reader_t*)user_data;
     const char* a_data = (const char*)&reader->base[(size_t)a->key_pool_offset + sizeof(uint32_t)];
     const char* b_data = (const char*)&reader->base[(size_t)b->key_pool_offset + sizeof(uint32_t)];
     size_t a_length = (size_t)a->key_length;
@@ -189,15 +223,9 @@ static int bc_hrbl_ini_sort_by_key(const void* left, const void* right, void* co
     size_t min_length = a_length < b_length ? a_length : b_length;
     int cmp = __builtin_memcmp(a_data, b_data, min_length);
     if (cmp != 0) {
-        return cmp;
+        return cmp < 0;
     }
-    if (a_length < b_length) {
-        return -1;
-    }
-    if (a_length > b_length) {
-        return 1;
-    }
-    return 0;
+    return a_length < b_length;
 }
 
 static bool bc_hrbl_ini_emit_block(bc_hrbl_ini_state_t* state, const char* section, size_t section_length, uint64_t block_offset,
@@ -243,7 +271,7 @@ static bool bc_hrbl_ini_emit_entry(bc_hrbl_ini_state_t* state, const char* secti
         for (uint32_t i = 0u; i < header.element_count; i += 1u) {
             uint64_t element_offset = 0u;
             (void)bc_core_copy(&element_offset, &state->reader->base[elements_offset + (uint64_t)i * BC_HRBL_ARRAY_ELEMENT_SIZE],
-                   sizeof(element_offset));
+                               sizeof(element_offset));
             bc_hrbl_kind_t element_kind;
             if (!bc_hrbl_reader_kind_at(state->reader, element_offset, &element_kind)) {
                 state->failed = true;
@@ -293,7 +321,8 @@ static bool bc_hrbl_ini_emit_block(bc_hrbl_ini_state_t* state, const char* secti
     bool sort_keys = state->options != NULL ? state->options->sort_keys : true;
     bc_hrbl_ini_sort_entry_t* entries = NULL;
     if (header.child_count != 0u) {
-        entries = (bc_hrbl_ini_sort_entry_t*)bc_hrbl_export_scratch_alloc(state->reader->memory_context, (size_t)header.child_count * sizeof(*entries));
+        entries = (bc_hrbl_ini_sort_entry_t*)bc_hrbl_export_scratch_alloc(state->reader->memory_context,
+                                                                          (size_t)header.child_count * sizeof(*entries));
         if (entries == NULL) {
             state->failed = true;
             return false;
@@ -306,7 +335,8 @@ static bool bc_hrbl_ini_emit_block(bc_hrbl_ini_state_t* state, const char* secti
             entries[i].value_offset = raw.value_offset;
         }
         if (sort_keys) {
-            qsort_r(entries, header.child_count, sizeof(*entries), bc_hrbl_ini_sort_by_key, (void*)state->reader);
+            (void)bc_core_sort_with_compare(entries, header.child_count, sizeof(*entries), bc_hrbl_ini_sort_less_by_key,
+                                            (void*)state->reader);
         }
     }
 
@@ -337,7 +367,8 @@ static bool bc_hrbl_ini_emit_block(bc_hrbl_ini_state_t* state, const char* secti
         const char* key_data = (const char*)&state->reader->base[(size_t)entries[i].key_pool_offset + sizeof(uint32_t)];
         if (kind == BC_HRBL_KIND_BLOCK) {
             if (blocks_to_emit == NULL) {
-                blocks_to_emit = (bc_hrbl_ini_sort_entry_t*)bc_hrbl_export_scratch_alloc(state->reader->memory_context, (size_t)header.child_count * sizeof(*blocks_to_emit));
+                blocks_to_emit = (bc_hrbl_ini_sort_entry_t*)bc_hrbl_export_scratch_alloc(
+                    state->reader->memory_context, (size_t)header.child_count * sizeof(*blocks_to_emit));
                 if (blocks_to_emit == NULL) {
                     bc_hrbl_export_scratch_free(state->reader->memory_context, entries);
                     state->failed = true;
@@ -348,8 +379,7 @@ static bool bc_hrbl_ini_emit_block(bc_hrbl_ini_state_t* state, const char* secti
             blocks_count += 1u;
             continue;
         }
-        if (!bc_hrbl_ini_emit_entry(state, section, section_length, key_data, (size_t)entries[i].key_length,
-                                    entries[i].value_offset)) {
+        if (!bc_hrbl_ini_emit_entry(state, section, section_length, key_data, (size_t)entries[i].key_length, entries[i].value_offset)) {
             bc_hrbl_export_scratch_free(state->reader->memory_context, entries);
             bc_hrbl_export_scratch_free(state->reader->memory_context, blocks_to_emit);
             return false;
@@ -374,18 +404,18 @@ static bool bc_hrbl_ini_emit_block(bc_hrbl_ini_state_t* state, const char* secti
     return true;
 }
 
-bool bc_hrbl_export_ini(const bc_hrbl_reader_t* reader, FILE* stream)
+bool bc_hrbl_export_ini(const bc_hrbl_reader_t* reader, bc_core_writer_t* writer)
 {
-    return bc_hrbl_export_ini_ex(reader, stream, NULL);
+    return bc_hrbl_export_ini_ex(reader, writer, NULL);
 }
 
-bool bc_hrbl_export_ini_ex(const bc_hrbl_reader_t* reader, FILE* stream, const bc_hrbl_export_options_t* options)
+bool bc_hrbl_export_ini_ex(const bc_hrbl_reader_t* reader, bc_core_writer_t* writer, const bc_hrbl_export_options_t* options)
 {
-    if (reader == NULL || stream == NULL) {
+    if (reader == NULL || writer == NULL) {
         return false;
     }
     bc_hrbl_ini_state_t state;
-    state.stream = stream;
+    state.writer = writer;
     state.reader = reader;
     state.options = options;
     state.failed = false;
@@ -396,7 +426,8 @@ bool bc_hrbl_export_ini_ex(const bc_hrbl_reader_t* reader, FILE* stream, const b
     }
 
     bool sort_keys = options != NULL ? options->sort_keys : true;
-    bc_hrbl_ini_sort_entry_t* entries = (bc_hrbl_ini_sort_entry_t*)bc_hrbl_export_scratch_alloc(reader->memory_context, (size_t)root_count * sizeof(*entries));
+    bc_hrbl_ini_sort_entry_t* entries =
+        (bc_hrbl_ini_sort_entry_t*)bc_hrbl_export_scratch_alloc(reader->memory_context, (size_t)root_count * sizeof(*entries));
     if (entries == NULL) {
         return false;
     }
@@ -408,7 +439,7 @@ bool bc_hrbl_export_ini_ex(const bc_hrbl_reader_t* reader, FILE* stream, const b
         entries[i].value_offset = raw.value_offset;
     }
     if (sort_keys) {
-        qsort_r(entries, (size_t)root_count, sizeof(*entries), bc_hrbl_ini_sort_by_key, (void*)reader);
+        (void)bc_core_sort_with_compare(entries, (size_t)root_count, sizeof(*entries), bc_hrbl_ini_sort_less_by_key, (void*)reader);
     }
 
     bc_hrbl_ini_sort_entry_t* blocks_to_emit = NULL;
@@ -422,7 +453,8 @@ bool bc_hrbl_export_ini_ex(const bc_hrbl_reader_t* reader, FILE* stream, const b
         const char* key_data = (const char*)&reader->base[(size_t)entries[i].key_pool_offset + sizeof(uint32_t)];
         if (kind == BC_HRBL_KIND_BLOCK) {
             if (blocks_to_emit == NULL) {
-                blocks_to_emit = (bc_hrbl_ini_sort_entry_t*)bc_hrbl_export_scratch_alloc(reader->memory_context, (size_t)root_count * sizeof(*blocks_to_emit));
+                blocks_to_emit = (bc_hrbl_ini_sort_entry_t*)bc_hrbl_export_scratch_alloc(reader->memory_context,
+                                                                                         (size_t)root_count * sizeof(*blocks_to_emit));
                 if (blocks_to_emit == NULL) {
                     state.failed = true;
                     break;
@@ -439,8 +471,7 @@ bool bc_hrbl_export_ini_ex(const bc_hrbl_reader_t* reader, FILE* stream, const b
     bc_hrbl_export_scratch_free(reader->memory_context, entries);
     for (size_t i = 0u; i < blocks_count && !state.failed; i += 1u) {
         const char* key_data = (const char*)&reader->base[(size_t)blocks_to_emit[i].key_pool_offset + sizeof(uint32_t)];
-        if (!bc_hrbl_ini_emit_entry(&state, "", 0u, key_data, (size_t)blocks_to_emit[i].key_length,
-                                    blocks_to_emit[i].value_offset)) {
+        if (!bc_hrbl_ini_emit_entry(&state, "", 0u, key_data, (size_t)blocks_to_emit[i].key_length, blocks_to_emit[i].value_offset)) {
             break;
         }
     }

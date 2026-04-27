@@ -3,6 +3,8 @@
 #include "bc_hrbl.h"
 #include "bc_allocators.h"
 
+#include <bc/bc_core_io.h>
+
 #include <inttypes.h>
 #include <stdbool.h>
 #include <stddef.h>
@@ -112,8 +114,8 @@ static void bench_writer(size_t entries)
     }
     double seconds = (double)best_ns / 1e9;
     double mb = (double)output_size / (1024.0 * 1024.0);
-    printf("writer_100k    : entries=%zu  output=%zu B (%.2f MiB)  best=%.3f ms  throughput=%.2f MB/s\n",
-           entries, output_size, mb, seconds * 1000.0, mb / seconds);
+    printf("writer_100k    : entries=%zu  output=%zu B (%.2f MiB)  best=%.3f ms  throughput=%.2f MB/s\n", entries, output_size, mb,
+           seconds * 1000.0, mb / seconds);
     bc_allocators_context_destroy(memory);
 }
 
@@ -201,8 +203,8 @@ static void bench_query_latency(size_t entries)
     }
     uint64_t total_ops = (uint64_t)num_keys * (uint64_t)iterations_per_key;
     double ns_per_op = (double)best_total / (double)total_ops;
-    printf("query_latency  : entries=%zu  lookups=%" PRIu64 "  median_ns=%.1f   (sink=%" PRId64 ")\n",
-           entries, total_ops, ns_per_op, (int64_t)sink);
+    printf("query_latency  : entries=%zu  lookups=%" PRIu64 "  median_ns=%.1f   (sink=%" PRId64 ")\n", entries, total_ops, ns_per_op,
+           (int64_t)sink);
     bc_hrbl_reader_destroy(reader);
     bc_hrbl_free_buffer(memory, hrbl_buffer);
     bc_allocators_context_destroy(memory);
@@ -232,8 +234,8 @@ static void bench_convert_json(size_t entries)
     }
     double seconds = (double)best_ns / 1e9;
     double json_mb = (double)json_size / (1024.0 * 1024.0);
-    printf("json_to_hrbl   : json=%zu B (%.2f MiB)  hrbl=%zu B  best=%.3f ms  %.2f MB/s\n",
-           json_size, json_mb, output_size, seconds * 1000.0, json_mb / seconds);
+    printf("json_to_hrbl   : json=%zu B (%.2f MiB)  hrbl=%zu B  best=%.3f ms  %.2f MB/s\n", json_size, json_mb, output_size,
+           seconds * 1000.0, json_mb / seconds);
     free(json_text);
     bc_allocators_context_destroy(memory);
 }
@@ -250,25 +252,33 @@ static void bench_export_json(size_t entries)
     uint64_t best_ns = UINT64_MAX;
     size_t output_size = 0u;
     const int iterations = 3;
+    /* Sized for ~entries * ~40 bytes of JSON; padded for safety. */
+    size_t sink_capacity = entries * 64u + 1024u;
+    char* sink_buffer = (char*)malloc(sink_capacity);
+    if (sink_buffer == NULL) {
+        fputs("fatal: bench export sink alloc failed\n", stderr);
+        exit(1);
+    }
     for (int iter = 0; iter < iterations; iter += 1) {
-        char* sink_buffer = NULL;
-        size_t sink_size = 0u;
-        FILE* stream = open_memstream(&sink_buffer, &sink_size);
+        bc_core_writer_t writer;
+        (void)bc_core_writer_init_buffer_only(&writer, sink_buffer, sink_capacity);
         uint64_t start = bench_now_ns();
-        (void)bc_hrbl_export_json(reader, stream);
-        fflush(stream);
+        (void)bc_hrbl_export_json(reader, &writer);
         uint64_t elapsed = bench_now_ns() - start;
-        fclose(stream);
-        output_size = sink_size;
-        free(sink_buffer);
+        const char* out_data = NULL;
+        size_t out_length = 0u;
+        (void)bc_core_writer_buffer_data(&writer, &out_data, &out_length);
+        output_size = out_length;
+        bc_core_writer_destroy(&writer);
         if (elapsed < best_ns) {
             best_ns = elapsed;
         }
     }
+    free(sink_buffer);
     double seconds = (double)best_ns / 1e9;
     double mb = (double)output_size / (1024.0 * 1024.0);
-    printf("hrbl_to_json   : hrbl=%zu B  json=%zu B (%.2f MiB)  best=%.3f ms  %.2f MB/s\n",
-           hrbl_size, output_size, mb, seconds * 1000.0, mb / seconds);
+    printf("hrbl_to_json   : hrbl=%zu B  json=%zu B (%.2f MiB)  best=%.3f ms  %.2f MB/s\n", hrbl_size, output_size, mb, seconds * 1000.0,
+           mb / seconds);
     bc_hrbl_reader_destroy(reader);
     bc_hrbl_free_buffer(memory, hrbl_buffer);
     bc_allocators_context_destroy(memory);
