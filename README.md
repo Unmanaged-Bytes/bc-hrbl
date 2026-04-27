@@ -1,5 +1,6 @@
 # bc-hrbl
 
+[![CI](https://github.com/Unmanaged-Bytes/bc-hrbl/actions/workflows/ci.yml/badge.svg)](https://github.com/Unmanaged-Bytes/bc-hrbl/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 ![Language: C11](https://img.shields.io/badge/language-C11-informational)
 ![Platform: Linux](https://img.shields.io/badge/platform-Linux-lightgrey)

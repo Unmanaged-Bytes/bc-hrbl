@@ -148,9 +148,6 @@ bool bc_hrbl_writer_create_ex(bc_allocators_context_t* memory_context, const bc_
 
 void bc_hrbl_writer_destroy(bc_hrbl_writer_t* writer)
 {
-    if (writer == NULL) {
-        return;
-    }
     if (writer->arena != NULL) {
         bc_allocators_arena_destroy(writer->arena);
         writer->arena = NULL;
@@ -158,8 +155,7 @@ void bc_hrbl_writer_destroy(bc_hrbl_writer_t* writer)
     bc_allocators_pool_free(writer->memory_context, writer);
 }
 
-static bool bc_hrbl_writer_add_leaf(bc_hrbl_writer_t* writer, const char* key, size_t key_length, bc_hrbl_kind_t kind,
-                                    bool require_key)
+static bool bc_hrbl_writer_add_leaf(bc_hrbl_writer_t* writer, const char* key, size_t key_length, bc_hrbl_kind_t kind, bool require_key)
 {
     if (writer == NULL || writer->error_flag) {
         if (writer != NULL) {
@@ -210,7 +206,8 @@ bool bc_hrbl_writer_set_int64(bc_hrbl_writer_t* writer, const char* key, size_t 
     if (!bc_hrbl_writer_add_leaf(writer, key, key_length, BC_HRBL_KIND_INT64, true)) {
         return false;
     }
-    writer->current_scope == NULL ? (writer->root_last->as.int64_value = value) : (writer->current_scope->last_child->as.int64_value = value);
+    writer->current_scope == NULL ? (writer->root_last->as.int64_value = value)
+                                  : (writer->current_scope->last_child->as.int64_value = value);
     return true;
 }
 
@@ -219,7 +216,8 @@ bool bc_hrbl_writer_set_uint64(bc_hrbl_writer_t* writer, const char* key, size_t
     if (!bc_hrbl_writer_add_leaf(writer, key, key_length, BC_HRBL_KIND_UINT64, true)) {
         return false;
     }
-    writer->current_scope == NULL ? (writer->root_last->as.uint64_value = value) : (writer->current_scope->last_child->as.uint64_value = value);
+    writer->current_scope == NULL ? (writer->root_last->as.uint64_value = value)
+                                  : (writer->current_scope->last_child->as.uint64_value = value);
     return true;
 }
 
@@ -228,7 +226,8 @@ bool bc_hrbl_writer_set_float64(bc_hrbl_writer_t* writer, const char* key, size_
     if (!bc_hrbl_writer_add_leaf(writer, key, key_length, BC_HRBL_KIND_FLOAT64, true)) {
         return false;
     }
-    writer->current_scope == NULL ? (writer->root_last->as.float64_value = value) : (writer->current_scope->last_child->as.float64_value = value);
+    writer->current_scope == NULL ? (writer->root_last->as.float64_value = value)
+                                  : (writer->current_scope->last_child->as.float64_value = value);
     return true;
 }
 
@@ -455,8 +454,5 @@ bool bc_hrbl_writer_finalize_to_file(bc_hrbl_writer_t* writer, const char* outpu
 
 void bc_hrbl_free_buffer(bc_allocators_context_t* memory_context, void* buffer)
 {
-    if (buffer == NULL) {
-        return;
-    }
     bc_allocators_pool_free(memory_context, buffer);
 }

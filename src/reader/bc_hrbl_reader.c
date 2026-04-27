@@ -80,8 +80,8 @@ static bool bc_hrbl_reader_footer_matches(const uint8_t* base, const bc_hrbl_hea
     return true;
 }
 
-static bool bc_hrbl_reader_attach_buffer(bc_allocators_context_t* memory_context, const void* data, size_t size,
-                                         bc_io_mmap_t* mmap_handle, bc_hrbl_reader_t** out_reader)
+static bool bc_hrbl_reader_attach_buffer(bc_allocators_context_t* memory_context, const void* data, size_t size, bc_io_mmap_t* mmap_handle,
+                                         bc_hrbl_reader_t** out_reader)
 {
     if (size < BC_HRBL_HEADER_SIZE + BC_HRBL_FOOTER_SIZE) {
         return false;
@@ -139,8 +139,7 @@ bool bc_hrbl_reader_open(bc_allocators_context_t* memory_context, const char* pa
     return true;
 }
 
-bool bc_hrbl_reader_open_buffer(bc_allocators_context_t* memory_context, const void* data, size_t size,
-                                bc_hrbl_reader_t** out_reader)
+bool bc_hrbl_reader_open_buffer(bc_allocators_context_t* memory_context, const void* data, size_t size, bc_hrbl_reader_t** out_reader)
 {
     if (out_reader == NULL) {
         return false;
@@ -154,9 +153,6 @@ bool bc_hrbl_reader_open_buffer(bc_allocators_context_t* memory_context, const v
 
 void bc_hrbl_reader_destroy(bc_hrbl_reader_t* reader)
 {
-    if (reader == NULL) {
-        return;
-    }
     if (reader->mmap_handle != NULL) {
         bc_io_mmap_destroy(reader->mmap_handle);
     }
@@ -184,8 +180,7 @@ static bool bc_hrbl_reader_read_entry(const bc_hrbl_reader_t* reader, uint64_t e
     return true;
 }
 
-static bool bc_hrbl_reader_key_equals(const bc_hrbl_reader_t* reader, const bc_hrbl_entry_t* entry, const char* key_data,
-                                      size_t key_length)
+static bool bc_hrbl_reader_key_equals(const bc_hrbl_reader_t* reader, const bc_hrbl_entry_t* entry, const char* key_data, size_t key_length)
 {
     if ((size_t)entry->key_length != key_length) {
         return false;
@@ -200,9 +195,8 @@ static bool bc_hrbl_reader_key_equals(const bc_hrbl_reader_t* reader, const bc_h
     return __builtin_memcmp(&reader->base[pool_offset], key_data, key_length) == 0;
 }
 
-static bool bc_hrbl_reader_linear_probe_range(const bc_hrbl_reader_t* reader, uint64_t entries_start, uint64_t entry_count,
-                                              uint64_t index, uint64_t target_hash, const char* key_data, size_t key_length,
-                                              bc_hrbl_entry_t* out_entry)
+static bool bc_hrbl_reader_linear_probe_range(const bc_hrbl_reader_t* reader, uint64_t entries_start, uint64_t entry_count, uint64_t index,
+                                              uint64_t target_hash, const char* key_data, size_t key_length, bc_hrbl_entry_t* out_entry)
 {
     int64_t left = (int64_t)index;
     while (left >= 0) {
@@ -240,8 +234,7 @@ static bool bc_hrbl_reader_linear_probe_range(const bc_hrbl_reader_t* reader, ui
 }
 
 static bool bc_hrbl_reader_binary_search_entries(const bc_hrbl_reader_t* reader, uint64_t entries_start, uint64_t entry_count,
-                                                 uint64_t target_hash, const char* key_data, size_t key_length,
-                                                 bc_hrbl_entry_t* out_entry)
+                                                 uint64_t target_hash, const char* key_data, size_t key_length, bc_hrbl_entry_t* out_entry)
 {
     if (entry_count == 0u) {
         return false;
@@ -264,8 +257,7 @@ static bool bc_hrbl_reader_binary_search_entries(const bc_hrbl_reader_t* reader,
                 *out_entry = candidate;
                 return true;
             }
-            return bc_hrbl_reader_linear_probe_range(reader, entries_start, entry_count, mid, target_hash, key_data, key_length,
-                                                     out_entry);
+            return bc_hrbl_reader_linear_probe_range(reader, entries_start, entry_count, mid, target_hash, key_data, key_length, out_entry);
         }
     }
     return false;
@@ -301,8 +293,8 @@ bool bc_hrbl_reader_find_root_offset(const bc_hrbl_reader_t* reader, const char*
 {
     uint64_t hash = (uint64_t)XXH3_64bits(key, key_length);
     bc_hrbl_entry_t entry;
-    if (!bc_hrbl_reader_binary_search_entries(reader, reader->header->root_index_offset, reader->header->root_count, hash, key,
-                                              key_length, &entry)) {
+    if (!bc_hrbl_reader_binary_search_entries(reader, reader->header->root_index_offset, reader->header->root_count, hash, key, key_length,
+                                              &entry)) {
         return false;
     }
     *out_value_offset = entry.value_offset;
@@ -365,8 +357,8 @@ bool bc_hrbl_reader_block_child_count_at(const bc_hrbl_reader_t* reader, uint64_
     return true;
 }
 
-bool bc_hrbl_reader_block_entry_at_offset(const bc_hrbl_reader_t* reader, uint64_t block_offset, uint32_t index,
-                                          const char** out_key, uint32_t* out_key_length, uint64_t* out_value_offset)
+bool bc_hrbl_reader_block_entry_at_offset(const bc_hrbl_reader_t* reader, uint64_t block_offset, uint32_t index, const char** out_key,
+                                          uint32_t* out_key_length, uint64_t* out_value_offset)
 {
     bc_hrbl_block_header_t header;
     uint64_t entries_offset = 0u;
@@ -642,8 +634,7 @@ bool bc_hrbl_reader_resolve_path(const bc_hrbl_reader_t* reader, const char* pat
     return true;
 }
 
-static void bc_hrbl_value_ref_fill(bc_hrbl_value_ref_t* ref, const bc_hrbl_reader_t* reader, uint64_t value_offset,
-                                   bc_hrbl_kind_t kind)
+static void bc_hrbl_value_ref_fill(bc_hrbl_value_ref_t* ref, const bc_hrbl_reader_t* reader, uint64_t value_offset, bc_hrbl_kind_t kind)
 {
     ref->reader = reader;
     ref->node_offset = value_offset;
