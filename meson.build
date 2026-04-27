@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: MIT
 
 project('bc-hrbl', 'c',
-  version : '1.1.0',
+  version : 'rolling',
   license : 'MIT',
   default_options : [
     'c_std=c11',
@@ -50,10 +50,10 @@ endif
 
 pkg = import('pkgconfig')
 
-bc_core_dep        = dependency('bc-core',        version : '>= 1.3.1')
-bc_allocators_dep  = dependency('bc-allocators',  version : '>= 1.2.0')
-bc_io_dep          = dependency('bc-io',          version : '>= 1.1.1')
-bc_concurrency_dep = dependency('bc-concurrency', version : '>= 1.1.1')
+bc_core_dep        = dependency('bc-core')
+bc_allocators_dep  = dependency('bc-allocators')
+bc_io_dep          = dependency('bc-io')
+bc_concurrency_dep = dependency('bc-concurrency')
 xxhash_dep         = dependency('libxxhash',      version : '>= 0.8.0')
 json_c_dep         = dependency('json-c',         version : '>= 0.15')
 yaml_dep           = dependency('yaml-0.1',       version : '>= 0.2.0')
