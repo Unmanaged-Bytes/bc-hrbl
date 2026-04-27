@@ -269,23 +269,21 @@ static bool bc_hrbl_export_write_number_float64(bc_hrbl_export_state_t* state, d
     if (isnan(value) || isinf(value)) {
         return bc_hrbl_export_write_literal(state, "null");
     }
-    /* %.17g shortest-round-trip representation; bc_core_format_double zero-pads after the decimal point and is
-       semantically a different format. Keep snprintf here to preserve byte-equivalent output. */
     char buffer[64];
-    int written = snprintf(buffer, sizeof(buffer), "%.17g", value);
-    if (written < 0 || (size_t)written >= sizeof(buffer)) {
+    size_t written = 0;
+    if (!bc_core_format_double_shortest_round_trip(buffer, sizeof(buffer), value, &written)) {
         state->write_failed = true;
         return false;
     }
     bool has_dot_or_exp = false;
-    for (int i = 0; i < written; i += 1) {
+    for (size_t i = 0; i < written; i += 1) {
         char c = buffer[i];
         if (c == '.' || c == 'e' || c == 'E') {
             has_dot_or_exp = true;
             break;
         }
     }
-    if (!bc_hrbl_export_write_all(state, buffer, (size_t)written)) {
+    if (!bc_hrbl_export_write_all(state, buffer, written)) {
         return false;
     }
     if (!has_dot_or_exp) {

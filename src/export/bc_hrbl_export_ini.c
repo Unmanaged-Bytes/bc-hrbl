@@ -184,9 +184,8 @@ static bool bc_hrbl_ini_write_scalar_value(bc_hrbl_ini_state_t* state, uint64_t 
         if (isnan(v) || isinf(v)) {
             return bc_hrbl_ini_write_literal(state, "");
         }
-        /* %.17g shortest-round-trip; bc_core_format_double has different padding semantics. */
-        int n = snprintf(buffer, sizeof(buffer), "%.17g", v);
-        return n >= 0 && bc_hrbl_ini_write(state, buffer, (size_t)n);
+        size_t n = 0;
+        return bc_core_format_double_shortest_round_trip(buffer, sizeof(buffer), v, &n) && bc_hrbl_ini_write(state, buffer, n);
     }
     case BC_HRBL_KIND_STRING: {
         const char* data = NULL;
