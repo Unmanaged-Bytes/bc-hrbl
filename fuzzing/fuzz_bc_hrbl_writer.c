@@ -204,7 +204,7 @@ int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size)
     size_t buffer_size = 0u;
     if (bc_hrbl_writer_finalize_to_buffer(writer, &buffer, &buffer_size)) {
         (void)bc_hrbl_verify_buffer(buffer, buffer_size);
-        free(buffer);
+        bc_hrbl_free_buffer(memory, buffer);
     }
     bc_hrbl_writer_destroy(writer);
     bc_allocators_context_destroy(memory);

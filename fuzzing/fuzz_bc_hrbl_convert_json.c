@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 
 #include "bc_hrbl_convert.h"
+#include "bc_hrbl_writer.h"
 #include "bc_allocators.h"
 
 #include <stdint.h>
@@ -21,8 +22,9 @@ int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size)
     void* buffer = NULL;
     size_t out_size = 0u;
     bc_hrbl_convert_error_t error;
-    (void)bc_hrbl_convert_json_buffer_to_hrbl(memory, (const char*)data, size, &buffer, &out_size, &error);
-    free(buffer);
+    if (bc_hrbl_convert_json_buffer_to_hrbl(memory, (const char*)data, size, &buffer, &out_size, &error)) {
+        bc_hrbl_free_buffer(memory, buffer);
+    }
     bc_allocators_context_destroy(memory);
     return 0;
 }

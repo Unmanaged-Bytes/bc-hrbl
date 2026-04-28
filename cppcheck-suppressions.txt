@@ -10,10 +10,12 @@ unusedFunction:*/src/reader/*.c
 unusedFunction:*/src/writer/*.c
 unusedFunction:*/src/verify/*.c
 unusedFunction:*/src/export/*.c
+unusedFunction:*/src/convert/*.c
 unusedFunction:src/reader/*.c
 unusedFunction:src/writer/*.c
 unusedFunction:src/verify/*.c
 unusedFunction:src/export/*.c
+unusedFunction:src/convert/*.c
 
 // --- bc-core inline helpers transitively exposed ---
 unusedFunction:*/bc_core_math.h
