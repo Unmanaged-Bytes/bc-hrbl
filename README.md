@@ -44,7 +44,7 @@ if (bc_hrbl_reader_find(reader, "server.port", 11, &value)) {
     int64_t port = 0;
     bc_hrbl_reader_get_int64(&value, &port);
 }
-bc_hrbl_reader_destroy(reader);
+bc_hrbl_reader_close(reader);
 ```
 
 ## Path grammar

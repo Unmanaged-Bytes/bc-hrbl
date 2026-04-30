@@ -105,7 +105,7 @@ static void test_export_empty_document(void** state)
     assert_string_equal(out, "{}\n");
     free(out);
 
-    bc_hrbl_reader_destroy(reader);
+    bc_hrbl_reader_close(reader);
     bc_allocators_context_destroy(memory);
 }
 
@@ -161,7 +161,7 @@ static void test_export_single_int64_root(void** state)
     assert_string_equal(out, "{\n  \"count\": -42\n}\n");
     free(out);
 
-    bc_hrbl_reader_destroy(reader);
+    bc_hrbl_reader_close(reader);
     bc_allocators_context_destroy(memory);
     free(buffer);
 }
@@ -185,7 +185,7 @@ static void test_export_compact_mode(void** state)
     assert_string_equal(out, "{}");
     free(out);
 
-    bc_hrbl_reader_destroy(reader);
+    bc_hrbl_reader_close(reader);
     bc_allocators_context_destroy(memory);
 }
 

@@ -40,7 +40,7 @@ int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size)
             (void)bc_hrbl_export_ini(reader, &writer);
             bc_core_writer_destroy(&writer);
         }
-        bc_hrbl_reader_destroy(reader);
+        bc_hrbl_reader_close(reader);
     }
     bc_allocators_context_destroy(memory);
     return 0;

@@ -29,7 +29,7 @@ int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size)
         bc_hrbl_value_ref_t value;
         (void)bc_hrbl_reader_find(reader, "nonexistent", 11u, &value);
         (void)bc_hrbl_reader_find(reader, "a.b[0].c", 8u, &value);
-        bc_hrbl_reader_destroy(reader);
+        bc_hrbl_reader_close(reader);
     }
     bc_allocators_context_destroy(memory);
     return 0;

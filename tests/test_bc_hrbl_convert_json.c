@@ -57,7 +57,7 @@ static void test_convert_empty_object(void** state)
     assert_true(bc_hrbl_convert_json_buffer_to_hrbl(memory, json, strlen(json), &buffer, &size, &error));
     assert_int_equal((int)bc_hrbl_verify_buffer(buffer, size), (int)BC_HRBL_VERIFY_OK);
     assert_int_equal((int)size, 160);
-    bc_hrbl_free_buffer(memory, buffer);
+    bc_hrbl_writer_free_buffer(memory, buffer);
     bc_allocators_context_destroy(memory);
 }
 
@@ -98,8 +98,8 @@ static void test_convert_simple_object(void** state)
     assert_true(bc_hrbl_reader_get_float64(&value, &pi));
     assert_true(pi > 3.13 && pi < 3.15);
 
-    bc_hrbl_reader_destroy(reader);
-    bc_hrbl_free_buffer(memory, buffer);
+    bc_hrbl_reader_close(reader);
+    bc_hrbl_writer_free_buffer(memory, buffer);
     bc_allocators_context_destroy(memory);
 }
 
@@ -133,8 +133,8 @@ static void test_convert_nested_structure(void** state)
     assert_string_equal(exported, expected);
 
     free(exported);
-    bc_hrbl_reader_destroy(reader);
-    bc_hrbl_free_buffer(memory, buffer);
+    bc_hrbl_reader_close(reader);
+    bc_hrbl_writer_free_buffer(memory, buffer);
     bc_allocators_context_destroy(memory);
 }
 
@@ -168,8 +168,8 @@ static void test_convert_unicode_escapes(void** state)
     assert_int_equal((int)str_len, (int)strlen(expected_emoji));
     assert_memory_equal(str, expected_emoji, strlen(expected_emoji));
 
-    bc_hrbl_reader_destroy(reader);
-    bc_hrbl_free_buffer(memory, buffer);
+    bc_hrbl_reader_close(reader);
+    bc_hrbl_writer_free_buffer(memory, buffer);
     bc_allocators_context_destroy(memory);
 }
 

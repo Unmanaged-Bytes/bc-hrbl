@@ -107,16 +107,7 @@ static bool bc_hrbl_writer_expect_indexed_scope(const bc_hrbl_writer_t* writer)
     return writer->current_scope->kind == BC_HRBL_KIND_ARRAY;
 }
 
-bool bc_hrbl_writer_create(bc_allocators_context_t* memory_context, bc_hrbl_writer_t** out_writer)
-{
-    bc_hrbl_writer_options_t defaults;
-    defaults.worker_count = 0u;
-    defaults.deduplicate_strings = true;
-    return bc_hrbl_writer_create_ex(memory_context, &defaults, out_writer);
-}
-
-bool bc_hrbl_writer_create_ex(bc_allocators_context_t* memory_context, const bc_hrbl_writer_options_t* options,
-                              bc_hrbl_writer_t** out_writer)
+bool bc_hrbl_writer_create(bc_allocators_context_t* memory_context, const bc_hrbl_writer_options_t* options, bc_hrbl_writer_t** out_writer)
 {
     if (memory_context == NULL || out_writer == NULL) {
         if (out_writer != NULL) {
@@ -452,7 +443,7 @@ bool bc_hrbl_writer_finalize_to_file(bc_hrbl_writer_t* writer, const char* outpu
     return close_result == 0;
 }
 
-void bc_hrbl_free_buffer(bc_allocators_context_t* memory_context, void* buffer)
+void bc_hrbl_writer_free_buffer(bc_allocators_context_t* memory_context, void* buffer)
 {
     bc_allocators_pool_free(memory_context, buffer);
 }

@@ -88,7 +88,7 @@ static void test_reader_opens_empty_document(void** state)
     bc_hrbl_value_ref_t value;
     assert_false(bc_hrbl_reader_find(reader, "missing", 7u, &value));
 
-    bc_hrbl_reader_destroy(reader);
+    bc_hrbl_reader_close(reader);
     bc_allocators_context_destroy(memory);
 }
 
@@ -159,7 +159,7 @@ static void test_reader_opens_int64_root(void** state)
 
     assert_false(bc_hrbl_reader_find(reader, "missing", 7u, &value));
 
-    bc_hrbl_reader_destroy(reader);
+    bc_hrbl_reader_close(reader);
     bc_allocators_context_destroy(memory);
     free(buffer);
 }

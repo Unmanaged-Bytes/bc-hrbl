@@ -26,7 +26,7 @@ static bc_allocators_context_t* make_memory(void)
 static void build_simple(bc_allocators_context_t* memory, void** out_buffer, size_t* out_size)
 {
     bc_hrbl_writer_t* writer = NULL;
-    assert_true(bc_hrbl_writer_create(memory, &writer));
+    assert_true(bc_hrbl_writer_create(memory, NULL, &writer));
     assert_true(bc_hrbl_writer_set_string(writer, "name", 4u, "demo", 4u));
     assert_true(bc_hrbl_writer_set_int64(writer, "port", 4u, 8080));
     assert_true(bc_hrbl_writer_set_bool(writer, "tls", 3u, true));
@@ -37,7 +37,7 @@ static void build_simple(bc_allocators_context_t* memory, void** out_buffer, siz
 static void build_nested(bc_allocators_context_t* memory, void** out_buffer, size_t* out_size)
 {
     bc_hrbl_writer_t* writer = NULL;
-    assert_true(bc_hrbl_writer_create(memory, &writer));
+    assert_true(bc_hrbl_writer_create(memory, NULL, &writer));
     assert_true(bc_hrbl_writer_set_string(writer, "name", 4u, "app", 3u));
     assert_true(bc_hrbl_writer_begin_block(writer, "server", 6u));
     assert_true(bc_hrbl_writer_set_string(writer, "host", 4u, "localhost", 9u));
@@ -89,8 +89,8 @@ static void test_yaml_simple(void** state)
     assert_non_null(strstr(yaml, "\"tls\""));
     assert_non_null(strstr(yaml, "true"));
     free(yaml);
-    bc_hrbl_reader_destroy(reader);
-    bc_hrbl_free_buffer(memory, buffer);
+    bc_hrbl_reader_close(reader);
+    bc_hrbl_writer_free_buffer(memory, buffer);
     bc_allocators_context_destroy(memory);
 }
 
@@ -112,8 +112,8 @@ static void test_yaml_nested(void** state)
     assert_non_null(strstr(yaml, "- 80"));
     assert_non_null(strstr(yaml, "- 443"));
     free(yaml);
-    bc_hrbl_reader_destroy(reader);
-    bc_hrbl_free_buffer(memory, buffer);
+    bc_hrbl_reader_close(reader);
+    bc_hrbl_writer_free_buffer(memory, buffer);
     bc_allocators_context_destroy(memory);
 }
 
@@ -132,8 +132,8 @@ static void test_ini_simple(void** state)
     assert_non_null(strstr(ini, "port = 8080"));
     assert_non_null(strstr(ini, "tls = true"));
     free(ini);
-    bc_hrbl_reader_destroy(reader);
-    bc_hrbl_free_buffer(memory, buffer);
+    bc_hrbl_reader_close(reader);
+    bc_hrbl_writer_free_buffer(memory, buffer);
     bc_allocators_context_destroy(memory);
 }
 
@@ -155,8 +155,8 @@ static void test_ini_nested(void** state)
     assert_non_null(strstr(ini, "host = \"localhost\""));
     assert_non_null(strstr(ini, "port = 8080"));
     free(ini);
-    bc_hrbl_reader_destroy(reader);
-    bc_hrbl_free_buffer(memory, buffer);
+    bc_hrbl_reader_close(reader);
+    bc_hrbl_writer_free_buffer(memory, buffer);
     bc_allocators_context_destroy(memory);
 }
 

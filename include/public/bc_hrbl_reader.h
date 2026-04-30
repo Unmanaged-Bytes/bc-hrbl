@@ -14,7 +14,7 @@ bool bc_hrbl_reader_open(bc_allocators_context_t* memory_context, const char* pa
 
 bool bc_hrbl_reader_open_buffer(bc_allocators_context_t* memory_context, const void* data, size_t size, bc_hrbl_reader_t** out_reader);
 
-void bc_hrbl_reader_destroy(bc_hrbl_reader_t* reader);
+void bc_hrbl_reader_close(bc_hrbl_reader_t* reader);
 
 bool bc_hrbl_reader_root_count(const bc_hrbl_reader_t* reader, uint64_t* out_count);
 
