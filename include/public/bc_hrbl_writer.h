@@ -11,7 +11,7 @@
 #include <stdint.h>
 
 typedef struct bc_hrbl_writer_options {
-    uint32_t worker_count;
+    size_t worker_count;
     bool deduplicate_strings;
 } bc_hrbl_writer_options_t;
 

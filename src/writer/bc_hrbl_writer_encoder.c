@@ -818,7 +818,7 @@ bool bc_hrbl_writer_serialize_to_buffer(bc_hrbl_writer_t* writer, uint8_t** out_
     if (!bc_hrbl_encoder_pool_init(&pool, memory_context, 4096u)) {
         return false;
     }
-    pool.worker_count = (size_t)writer->options.worker_count;
+    pool.worker_count = writer->options.worker_count;
     for (bc_hrbl_writer_node_t* root = writer->root_first; root != NULL; root = root->next_sibling) {
         if (!bc_hrbl_encoder_collect_strings(&pool, root)) {
             bc_hrbl_encoder_pool_destroy(&pool);
