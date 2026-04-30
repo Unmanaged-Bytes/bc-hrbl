@@ -5,6 +5,7 @@
 
 #include "bc_hrbl_format_internal.h"
 #include "bc_hrbl_types.h"
+#include "bc_hrbl_writer.h"
 
 #include "bc_allocators.h"
 #include "bc_allocators_arena.h"
@@ -51,8 +52,10 @@ struct bc_hrbl_writer {
     uint32_t root_count;
     bc_hrbl_writer_node_t* current_scope;
     bool error_flag;
+    bc_hrbl_writer_error_t last_error;
 };
 
-bool bc_hrbl_writer_serialize_to_buffer(struct bc_hrbl_writer* writer, uint8_t** out_buffer, size_t* out_size);
+bool bc_hrbl_writer_serialize_to_buffer(struct bc_hrbl_writer* writer, uint8_t** out_buffer, size_t* out_size,
+                                        bc_hrbl_writer_error_t* out_error);
 
 #endif
