@@ -17,8 +17,9 @@ unusedFunction:src/verify/*.c
 unusedFunction:src/export/*.c
 unusedFunction:src/convert/*.c
 
-// --- bc-core inline helpers transitively exposed ---
+// --- bc-core / bc-allocators inline helpers transitively exposed ---
 unusedFunction:*/bc_core_math.h
+unusedFunction:*/bc_allocators_context.h
 
 // --- bc-hrbl internal inline helpers (consumed by writer/reader per phase) ---
 unusedFunction:*/bc_hrbl_format_internal.h
