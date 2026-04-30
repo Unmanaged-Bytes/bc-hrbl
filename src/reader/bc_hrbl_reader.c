@@ -3,6 +3,7 @@
 #include "bc_hrbl_reader.h"
 #include "bc_hrbl_reader_internal.h"
 #include "bc_hrbl_format_internal.h"
+#include "bc_hrbl_hash.h"
 
 #include "bc_allocators.h"
 #include "bc_allocators_pool.h"
@@ -12,8 +13,6 @@
 
 #include <stdlib.h>
 #include <string.h>
-
-#include <xxhash.h>
 
 static bool bc_hrbl_reader_header_layout_valid(const bc_hrbl_header_t* header, size_t size)
 {
@@ -291,7 +290,7 @@ bool bc_hrbl_reader_root_at_offset(const bc_hrbl_reader_t* reader, uint64_t inde
 
 bool bc_hrbl_reader_find_root_offset(const bc_hrbl_reader_t* reader, const char* key, size_t key_length, uint64_t* out_value_offset)
 {
-    uint64_t hash = (uint64_t)XXH3_64bits(key, key_length);
+    uint64_t hash = bc_hrbl_hash64(key, key_length);
     bc_hrbl_entry_t entry;
     if (!bc_hrbl_reader_binary_search_entries(reader, reader->header->root_index_offset, reader->header->root_count, hash, key, key_length,
                                               &entry)) {
@@ -395,7 +394,7 @@ bool bc_hrbl_reader_block_find_offset(const bc_hrbl_reader_t* reader, uint64_t b
     if (!bc_hrbl_reader_block_body_offsets(reader, block_offset, &header, &entries_offset)) {
         return false;
     }
-    uint64_t hash = (uint64_t)XXH3_64bits(key, key_length);
+    uint64_t hash = bc_hrbl_hash64(key, key_length);
     bc_hrbl_entry_t entry;
     if (!bc_hrbl_reader_binary_search_entries(reader, entries_offset, header.child_count, hash, key, key_length, &entry)) {
         return false;

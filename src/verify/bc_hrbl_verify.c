@@ -2,6 +2,7 @@
 
 #include "bc_hrbl_verify.h"
 #include "bc_hrbl_format_internal.h"
+#include "bc_hrbl_hash.h"
 
 #include "bc_allocators.h"
 #include "bc_core.h"
@@ -9,8 +10,6 @@
 #include "bc_io_mmap.h"
 
 #include <string.h>
-
-#include <xxhash.h>
 
 static bc_hrbl_verify_status_t bc_hrbl_verify_utf8_length(const uint8_t* data, size_t length)
 {
@@ -213,7 +212,7 @@ bc_hrbl_verify_status_t bc_hrbl_verify_buffer(const void* data, size_t size)
     }
 
     size_t payload_length = (size_t)(header.footer_offset - header.root_index_offset);
-    uint64_t checksum = (uint64_t)XXH3_64bits((const uint8_t*)data + header.root_index_offset, payload_length);
+    uint64_t checksum = bc_hrbl_hash64((const uint8_t*)data + header.root_index_offset, payload_length);
     if (checksum != header.checksum_xxh3_64) {
         return BC_HRBL_VERIFY_ERR_BAD_CHECKSUM;
     }

@@ -3,6 +3,7 @@
 #include "bc_hrbl_writer.h"
 #include "bc_hrbl_writer_internal.h"
 #include "bc_hrbl_format_internal.h"
+#include "bc_hrbl_hash.h"
 
 #include "bc_allocators.h"
 #include "bc_allocators_pool.h"
@@ -13,8 +14,6 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <stdlib.h>
-
-#include <xxhash.h>
 
 typedef struct bc_hrbl_encoder_buffer {
     uint8_t* data;
@@ -328,7 +327,7 @@ static bool bc_hrbl_encoder_pool_intern_with_hash(bc_hrbl_encoder_pool_t* pool, 
 
 static bool bc_hrbl_encoder_pool_intern(bc_hrbl_encoder_pool_t* pool, const char* data, size_t length, uint32_t* out_offset)
 {
-    uint64_t raw_hash = (uint64_t)XXH3_64bits(data, length);
+    uint64_t raw_hash = bc_hrbl_hash64(data, length);
     return bc_hrbl_encoder_pool_intern_with_hash(pool, data, length, raw_hash, out_offset);
 }
 
@@ -680,7 +679,7 @@ static bool bc_hrbl_encoder_emit_block(bc_hrbl_encoder_buffer_t* nodes, bc_hrbl_
         }
         uint64_t key_hash = child->key_hash64;
         if (key_length == 0u && child->key_data == NULL) {
-            key_hash = (uint64_t)XXH3_64bits(key_data, key_length);
+            key_hash = bc_hrbl_hash64(key_data, key_length);
         }
         uint32_t key_pool_offset = child->cached_key_pool_offset;
         if (key_pool_offset == BC_HRBL_WRITER_POOL_OFFSET_NONE) {
@@ -858,7 +857,7 @@ bool bc_hrbl_writer_serialize_to_buffer(bc_hrbl_writer_t* writer, uint8_t** out_
         }
         uint64_t key_hash = root->key_hash64;
         if (key_length == 0u && root->key_data == NULL) {
-            key_hash = (uint64_t)XXH3_64bits(key_data, key_length);
+            key_hash = bc_hrbl_hash64(key_data, key_length);
         }
         uint32_t key_pool_offset = root->cached_key_pool_offset;
         if (key_pool_offset == BC_HRBL_WRITER_POOL_OFFSET_NONE) {
@@ -955,7 +954,7 @@ bool bc_hrbl_writer_serialize_to_buffer(bc_hrbl_writer_t* writer, uint8_t** out_
     }
 
     size_t payload_length = (size_t)(footer_offset - root_index_offset);
-    uint64_t checksum = (uint64_t)XXH3_64bits(&output_data[root_index_offset], payload_length);
+    uint64_t checksum = bc_hrbl_hash64(&output_data[root_index_offset], payload_length);
 
     bc_hrbl_store_u64(&output_data[offsetof(bc_hrbl_header_t, checksum_xxh3_64)], checksum);
 
