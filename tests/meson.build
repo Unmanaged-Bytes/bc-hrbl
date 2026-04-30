@@ -47,3 +47,9 @@ test_bc_hrbl_export_yaml_ini = executable('test_bc_hrbl_export_yaml_ini',
     dependencies : [cmocka_dep, bc_hrbl_dep],
 )
 test('bc_hrbl_export_yaml_ini', test_bc_hrbl_export_yaml_ini)
+
+test_bc_hrbl_writer_errors = executable('test_bc_hrbl_writer_errors',
+    'test_bc_hrbl_writer_errors.c',
+    dependencies : [cmocka_dep, bc_hrbl_dep],
+)
+test('bc_hrbl_writer_errors', test_bc_hrbl_writer_errors)

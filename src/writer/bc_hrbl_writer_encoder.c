@@ -15,6 +15,14 @@
 #include <stddef.h>
 #include <stdlib.h>
 
+static inline bool bc_hrbl_encoder_fail(bc_hrbl_writer_error_t* out_error, bc_hrbl_writer_error_t code)
+{
+    if (out_error != NULL) {
+        *out_error = code;
+    }
+    return false;
+}
+
 typedef struct bc_hrbl_encoder_buffer {
     uint8_t* data;
     size_t size;
@@ -131,13 +139,13 @@ typedef struct bc_hrbl_encoder_pool {
     size_t worker_count;
 } bc_hrbl_encoder_pool_t;
 
-static bool bc_hrbl_encoder_pool_record_fixup(bc_hrbl_encoder_pool_t* pool, uint64_t node_offset)
+static bool bc_hrbl_encoder_pool_record_fixup(bc_hrbl_encoder_pool_t* pool, uint64_t node_offset, bc_hrbl_writer_error_t* out_error)
 {
     if (pool->fixup_count == pool->fixup_capacity) {
         size_t new_capacity = pool->fixup_capacity == 0u ? 1024u : pool->fixup_capacity * 2u;
         void* pointer = NULL;
         if (!bc_allocators_pool_reallocate(pool->memory_context, pool->fixup_offsets, new_capacity * sizeof(uint64_t), &pointer)) {
-            return false;
+            return bc_hrbl_encoder_fail(out_error, BC_HRBL_WRITER_ERROR_OOM);
         }
         pool->fixup_offsets = (uint64_t*)pointer;
         pool->fixup_capacity = new_capacity;
@@ -152,9 +160,10 @@ static uint64_t bc_hrbl_encoder_pool_mark(uint64_t raw_hash)
     return raw_hash == 0u ? BC_HRBL_ENCODER_POOL_HASH_NONZERO : raw_hash;
 }
 
-static bool bc_hrbl_encoder_pool_slots_grow(bc_hrbl_encoder_pool_t* pool, size_t new_capacity);
+static bool bc_hrbl_encoder_pool_slots_grow(bc_hrbl_encoder_pool_t* pool, size_t new_capacity, bc_hrbl_writer_error_t* out_error);
 
-static bool bc_hrbl_encoder_pool_init(bc_hrbl_encoder_pool_t* pool, bc_allocators_context_t* memory_context, size_t initial_capacity)
+static bool bc_hrbl_encoder_pool_init(bc_hrbl_encoder_pool_t* pool, bc_allocators_context_t* memory_context, size_t initial_capacity,
+                                      bc_hrbl_writer_error_t* out_error)
 {
     pool->memory_context = memory_context;
     pool->entries = NULL;
@@ -172,9 +181,9 @@ static bool bc_hrbl_encoder_pool_init(bc_hrbl_encoder_pool_t* pool, bc_allocator
         initial_capacity = 4096u;
     }
     if (!bc_hrbl_encoder_buffer_init(&pool->buffer, memory_context, initial_capacity)) {
-        return false;
+        return bc_hrbl_encoder_fail(out_error, BC_HRBL_WRITER_ERROR_OOM);
     }
-    if (!bc_hrbl_encoder_pool_slots_grow(pool, 512u)) {
+    if (!bc_hrbl_encoder_pool_slots_grow(pool, 512u, out_error)) {
         bc_hrbl_encoder_buffer_destroy(&pool->buffer);
         return false;
     }
@@ -204,12 +213,12 @@ static void bc_hrbl_encoder_pool_destroy(bc_hrbl_encoder_pool_t* pool)
     pool->fixup_capacity = 0u;
 }
 
-static bool bc_hrbl_encoder_pool_slots_grow(bc_hrbl_encoder_pool_t* pool, size_t new_capacity)
+static bool bc_hrbl_encoder_pool_slots_grow(bc_hrbl_encoder_pool_t* pool, size_t new_capacity, bc_hrbl_writer_error_t* out_error)
 {
     void* pointer = NULL;
     size_t bytes = new_capacity * sizeof(bc_hrbl_encoder_pool_slot_t);
     if (!bc_allocators_pool_allocate(pool->memory_context, bytes, &pointer)) {
-        return false;
+        return bc_hrbl_encoder_fail(out_error, BC_HRBL_WRITER_ERROR_OOM);
     }
     bc_hrbl_encoder_pool_slot_t* new_slots = (bc_hrbl_encoder_pool_slot_t*)pointer;
     (void)bc_core_zero(new_slots, bytes);
@@ -237,7 +246,7 @@ static bool bc_hrbl_encoder_pool_slots_grow(bc_hrbl_encoder_pool_t* pool, size_t
     return true;
 }
 
-static bool bc_hrbl_encoder_pool_entries_reserve(bc_hrbl_encoder_pool_t* pool, size_t required)
+static bool bc_hrbl_encoder_pool_entries_reserve(bc_hrbl_encoder_pool_t* pool, size_t required, bc_hrbl_writer_error_t* out_error)
 {
     if (required <= pool->entries_capacity) {
         return true;
@@ -249,7 +258,7 @@ static bool bc_hrbl_encoder_pool_entries_reserve(bc_hrbl_encoder_pool_t* pool, s
     void* pointer = NULL;
     if (!bc_allocators_pool_reallocate(pool->memory_context, pool->entries, new_capacity * sizeof(bc_hrbl_encoder_pool_entry_t),
                                        &pointer)) {
-        return false;
+        return bc_hrbl_encoder_fail(out_error, BC_HRBL_WRITER_ERROR_OOM);
     }
     pool->entries = (bc_hrbl_encoder_pool_entry_t*)pointer;
     pool->entries_capacity = new_capacity;
@@ -257,10 +266,10 @@ static bool bc_hrbl_encoder_pool_entries_reserve(bc_hrbl_encoder_pool_t* pool, s
 }
 
 static bool bc_hrbl_encoder_pool_intern_with_hash(bc_hrbl_encoder_pool_t* pool, const char* data, size_t length, uint64_t raw_hash,
-                                                  uint32_t* out_offset)
+                                                  uint32_t* out_offset, bc_hrbl_writer_error_t* out_error)
 {
     if (length > UINT32_MAX) {
-        return false;
+        return bc_hrbl_encoder_fail(out_error, BC_HRBL_WRITER_ERROR_STRING_LENGTH_OVERFLOW_4GB);
     }
     uint64_t hash = bc_hrbl_encoder_pool_mark(raw_hash);
     size_t pos = (size_t)hash & pool->slots_mask;
@@ -289,19 +298,19 @@ static bool bc_hrbl_encoder_pool_intern_with_hash(bc_hrbl_encoder_pool_t* pool, 
     }
     size_t intra_offset = pool->buffer.size;
     if (intra_offset > UINT32_MAX) {
-        return false;
+        return bc_hrbl_encoder_fail(out_error, BC_HRBL_WRITER_ERROR_STRING_POOL_OVERFLOW_4GB);
     }
     uint32_t length_u32 = (uint32_t)length;
     if (!bc_hrbl_encoder_buffer_append(&pool->buffer, &length_u32, sizeof(length_u32))) {
-        return false;
+        return bc_hrbl_encoder_fail(out_error, BC_HRBL_WRITER_ERROR_OOM);
     }
     if (length != 0u && !bc_hrbl_encoder_buffer_append(&pool->buffer, data, length)) {
-        return false;
+        return bc_hrbl_encoder_fail(out_error, BC_HRBL_WRITER_ERROR_OOM);
     }
     if (!bc_hrbl_encoder_buffer_align_to(&pool->buffer, 4u)) {
-        return false;
+        return bc_hrbl_encoder_fail(out_error, BC_HRBL_WRITER_ERROR_OOM);
     }
-    if (!bc_hrbl_encoder_pool_entries_reserve(pool, pool->entries_count + 1u)) {
+    if (!bc_hrbl_encoder_pool_entries_reserve(pool, pool->entries_count + 1u, out_error)) {
         return false;
     }
     pool->entries[pool->entries_count].pool_offset = (uint32_t)intra_offset;
@@ -309,7 +318,7 @@ static bool bc_hrbl_encoder_pool_intern_with_hash(bc_hrbl_encoder_pool_t* pool, 
     size_t entry_index = pool->entries_count;
     pool->entries_count += 1u;
     if ((pool->slots_used + 1u) * 4u >= pool->slots_capacity * 3u) {
-        if (!bc_hrbl_encoder_pool_slots_grow(pool, pool->slots_capacity * 2u)) {
+        if (!bc_hrbl_encoder_pool_slots_grow(pool, pool->slots_capacity * 2u, out_error)) {
             pool->entries_count -= 1u;
             return false;
         }
@@ -325,20 +334,21 @@ static bool bc_hrbl_encoder_pool_intern_with_hash(bc_hrbl_encoder_pool_t* pool, 
     return true;
 }
 
-static bool bc_hrbl_encoder_pool_intern(bc_hrbl_encoder_pool_t* pool, const char* data, size_t length, uint32_t* out_offset)
+static bool bc_hrbl_encoder_pool_intern(bc_hrbl_encoder_pool_t* pool, const char* data, size_t length, uint32_t* out_offset,
+                                        bc_hrbl_writer_error_t* out_error)
 {
     uint64_t raw_hash = bc_hrbl_hash64(data, length);
-    return bc_hrbl_encoder_pool_intern_with_hash(pool, data, length, raw_hash, out_offset);
+    return bc_hrbl_encoder_pool_intern_with_hash(pool, data, length, raw_hash, out_offset, out_error);
 }
 
-static bool bc_hrbl_encoder_collect_strings(bc_hrbl_encoder_pool_t* pool, bc_hrbl_writer_node_t* node)
+static bool bc_hrbl_encoder_collect_strings(bc_hrbl_encoder_pool_t* pool, bc_hrbl_writer_node_t* node, bc_hrbl_writer_error_t* out_error)
 {
     if (node == NULL) {
         return true;
     }
     if (node->key_data != NULL) {
         uint32_t offset = 0u;
-        if (!bc_hrbl_encoder_pool_intern_with_hash(pool, node->key_data, (size_t)node->key_length, node->key_hash64, &offset)) {
+        if (!bc_hrbl_encoder_pool_intern_with_hash(pool, node->key_data, (size_t)node->key_length, node->key_hash64, &offset, out_error)) {
             return false;
         }
         node->cached_key_pool_offset = offset;
@@ -351,13 +361,13 @@ static bool bc_hrbl_encoder_collect_strings(bc_hrbl_encoder_pool_t* pool, bc_hrb
             length = 0u;
         }
         uint32_t offset = 0u;
-        if (!bc_hrbl_encoder_pool_intern(pool, data, (size_t)length, &offset)) {
+        if (!bc_hrbl_encoder_pool_intern(pool, data, (size_t)length, &offset, out_error)) {
             return false;
         }
         node->cached_string_pool_offset = offset;
     }
     for (bc_hrbl_writer_node_t* child = node->first_child; child != NULL; child = child->next_sibling) {
-        if (!bc_hrbl_encoder_collect_strings(pool, child)) {
+        if (!bc_hrbl_encoder_collect_strings(pool, child, out_error)) {
             return false;
         }
     }
@@ -372,11 +382,11 @@ typedef struct bc_hrbl_encoder_pending_entry {
 } bc_hrbl_encoder_pending_entry_t;
 
 static bool bc_hrbl_encoder_pending_radix_sort_serial(bc_allocators_context_t* memory_context, bc_hrbl_encoder_pending_entry_t* entries,
-                                                      size_t count)
+                                                      size_t count, bc_hrbl_writer_error_t* out_error)
 {
     void* pointer = NULL;
     if (!bc_allocators_pool_allocate(memory_context, count * sizeof(bc_hrbl_encoder_pending_entry_t), &pointer)) {
-        return false;
+        return bc_hrbl_encoder_fail(out_error, BC_HRBL_WRITER_ERROR_OOM);
     }
     bc_hrbl_encoder_pending_entry_t* scratch = (bc_hrbl_encoder_pending_entry_t*)pointer;
     size_t counts[256];
@@ -440,22 +450,22 @@ static void* bc_hrbl_encoder_radix_scatter_worker(void* argument)
 }
 
 static bool bc_hrbl_encoder_pending_radix_sort_parallel(bc_allocators_context_t* memory_context, bc_hrbl_encoder_pending_entry_t* entries,
-                                                        size_t count, size_t worker_count)
+                                                        size_t count, size_t worker_count, bc_hrbl_writer_error_t* out_error)
 {
     void* scratch_pointer = NULL;
     if (!bc_allocators_pool_allocate(memory_context, count * sizeof(bc_hrbl_encoder_pending_entry_t), &scratch_pointer)) {
-        return false;
+        return bc_hrbl_encoder_fail(out_error, BC_HRBL_WRITER_ERROR_OOM);
     }
     void* contexts_pointer = NULL;
     if (!bc_allocators_pool_allocate(memory_context, worker_count * sizeof(bc_hrbl_encoder_radix_worker_context_t), &contexts_pointer)) {
         bc_allocators_pool_free(memory_context, scratch_pointer);
-        return false;
+        return bc_hrbl_encoder_fail(out_error, BC_HRBL_WRITER_ERROR_OOM);
     }
     void* threads_pointer = NULL;
     if (!bc_allocators_pool_allocate(memory_context, worker_count * sizeof(pthread_t), &threads_pointer)) {
         bc_allocators_pool_free(memory_context, scratch_pointer);
         bc_allocators_pool_free(memory_context, contexts_pointer);
-        return false;
+        return bc_hrbl_encoder_fail(out_error, BC_HRBL_WRITER_ERROR_OOM);
     }
 
     bc_hrbl_encoder_pending_entry_t* scratch = (bc_hrbl_encoder_pending_entry_t*)scratch_pointer;
@@ -481,7 +491,7 @@ static bool bc_hrbl_encoder_pending_radix_sort_parallel(bc_allocators_context_t*
                 bc_allocators_pool_free(memory_context, scratch_pointer);
                 bc_allocators_pool_free(memory_context, contexts_pointer);
                 bc_allocators_pool_free(memory_context, threads_pointer);
-                return false;
+                return bc_hrbl_encoder_fail(out_error, BC_HRBL_WRITER_ERROR_INTERNAL);
             }
         }
         for (size_t worker_index = 0u; worker_index < worker_count; worker_index += 1u) {
@@ -504,7 +514,7 @@ static bool bc_hrbl_encoder_pending_radix_sort_parallel(bc_allocators_context_t*
                 bc_allocators_pool_free(memory_context, scratch_pointer);
                 bc_allocators_pool_free(memory_context, contexts_pointer);
                 bc_allocators_pool_free(memory_context, threads_pointer);
-                return false;
+                return bc_hrbl_encoder_fail(out_error, BC_HRBL_WRITER_ERROR_INTERNAL);
             }
         }
         for (size_t worker_index = 0u; worker_index < worker_count; worker_index += 1u) {
@@ -522,16 +532,16 @@ static bool bc_hrbl_encoder_pending_radix_sort_parallel(bc_allocators_context_t*
 }
 
 static bool bc_hrbl_encoder_pending_radix_sort(bc_allocators_context_t* memory_context, bc_hrbl_encoder_pending_entry_t* entries,
-                                               size_t count, size_t worker_count)
+                                               size_t count, size_t worker_count, bc_hrbl_writer_error_t* out_error)
 {
     if (worker_count >= 2u && count >= 10000u) {
-        return bc_hrbl_encoder_pending_radix_sort_parallel(memory_context, entries, count, worker_count);
+        return bc_hrbl_encoder_pending_radix_sort_parallel(memory_context, entries, count, worker_count, out_error);
     }
-    return bc_hrbl_encoder_pending_radix_sort_serial(memory_context, entries, count);
+    return bc_hrbl_encoder_pending_radix_sort_serial(memory_context, entries, count, out_error);
 }
 
 static bool bc_hrbl_encoder_pending_sort(bc_allocators_context_t* memory_context, bc_hrbl_encoder_pending_entry_t* entries, size_t count,
-                                         size_t worker_count)
+                                         size_t worker_count, bc_hrbl_writer_error_t* out_error)
 {
     if (count < 2u) {
         return true;
@@ -548,26 +558,26 @@ static bool bc_hrbl_encoder_pending_sort(bc_allocators_context_t* memory_context
         }
         return true;
     }
-    return bc_hrbl_encoder_pending_radix_sort(memory_context, entries, count, worker_count);
+    return bc_hrbl_encoder_pending_radix_sort(memory_context, entries, count, worker_count, out_error);
 }
 
 static bool bc_hrbl_encoder_emit_value(bc_hrbl_encoder_buffer_t* nodes, bc_hrbl_encoder_pool_t* pool, uint64_t nodes_base_offset,
-                                       const bc_hrbl_writer_node_t* node, uint64_t* out_value_offset);
+                                       const bc_hrbl_writer_node_t* node, uint64_t* out_value_offset, bc_hrbl_writer_error_t* out_error);
 
 static bool bc_hrbl_encoder_emit_scalar(bc_hrbl_encoder_buffer_t* nodes, bc_hrbl_encoder_pool_t* pool, uint64_t nodes_base_offset,
-                                        const bc_hrbl_writer_node_t* node, uint64_t* out_value_offset)
+                                        const bc_hrbl_writer_node_t* node, uint64_t* out_value_offset, bc_hrbl_writer_error_t* out_error)
 {
     bc_hrbl_kind_t kind = node->kind;
     size_t body_align = bc_hrbl_kind_body_align(kind);
     size_t kind_offset = bc_hrbl_align_up(nodes->size + 1u, body_align) - 1u;
     if (kind_offset > nodes->size) {
         if (!bc_hrbl_encoder_buffer_append_zero(nodes, kind_offset - nodes->size)) {
-            return false;
+            return bc_hrbl_encoder_fail(out_error, BC_HRBL_WRITER_ERROR_OOM);
         }
     }
     uint8_t kind_byte = (uint8_t)kind;
     if (!bc_hrbl_encoder_buffer_append(nodes, &kind_byte, 1u)) {
-        return false;
+        return bc_hrbl_encoder_fail(out_error, BC_HRBL_WRITER_ERROR_OOM);
     }
     switch (kind) {
     case BC_HRBL_KIND_NULL:
@@ -577,21 +587,21 @@ static bool bc_hrbl_encoder_emit_scalar(bc_hrbl_encoder_buffer_t* nodes, bc_hrbl
     case BC_HRBL_KIND_INT64: {
         int64_t value = node->as.int64_value;
         if (!bc_hrbl_encoder_buffer_append(nodes, &value, sizeof(value))) {
-            return false;
+            return bc_hrbl_encoder_fail(out_error, BC_HRBL_WRITER_ERROR_OOM);
         }
         break;
     }
     case BC_HRBL_KIND_UINT64: {
         uint64_t value = node->as.uint64_value;
         if (!bc_hrbl_encoder_buffer_append(nodes, &value, sizeof(value))) {
-            return false;
+            return bc_hrbl_encoder_fail(out_error, BC_HRBL_WRITER_ERROR_OOM);
         }
         break;
     }
     case BC_HRBL_KIND_FLOAT64: {
         double value = node->as.float64_value;
         if (!bc_hrbl_encoder_buffer_append(nodes, &value, sizeof(value))) {
-            return false;
+            return bc_hrbl_encoder_fail(out_error, BC_HRBL_WRITER_ERROR_OOM);
         }
         break;
     }
@@ -604,7 +614,7 @@ static bool bc_hrbl_encoder_emit_scalar(bc_hrbl_encoder_buffer_t* nodes, bc_hrbl
         }
         uint32_t pool_offset_intra = node->cached_string_pool_offset;
         if (pool_offset_intra == BC_HRBL_WRITER_STRING_OFFSET_NONE) {
-            if (!bc_hrbl_encoder_pool_intern(pool, data, length, &pool_offset_intra)) {
+            if (!bc_hrbl_encoder_pool_intern(pool, data, length, &pool_offset_intra, out_error)) {
                 return false;
             }
         }
@@ -613,36 +623,36 @@ static bool bc_hrbl_encoder_emit_scalar(bc_hrbl_encoder_buffer_t* nodes, bc_hrbl
         ref.length = (uint32_t)length;
         uint64_t string_ref_offset = (uint64_t)nodes->size;
         if (!bc_hrbl_encoder_buffer_append(nodes, &ref, sizeof(ref))) {
-            return false;
+            return bc_hrbl_encoder_fail(out_error, BC_HRBL_WRITER_ERROR_OOM);
         }
-        if (!bc_hrbl_encoder_pool_record_fixup(pool, string_ref_offset)) {
+        if (!bc_hrbl_encoder_pool_record_fixup(pool, string_ref_offset, out_error)) {
             return false;
         }
         break;
     }
     case BC_HRBL_KIND_BLOCK:
     case BC_HRBL_KIND_ARRAY:
-        return false;
+        return bc_hrbl_encoder_fail(out_error, BC_HRBL_WRITER_ERROR_INTERNAL);
     }
     *out_value_offset = nodes_base_offset + kind_offset;
     return true;
 }
 
 static bool bc_hrbl_encoder_emit_block(bc_hrbl_encoder_buffer_t* nodes, bc_hrbl_encoder_pool_t* pool, uint64_t nodes_base_offset,
-                                       const bc_hrbl_writer_node_t* node, uint64_t* out_value_offset)
+                                       const bc_hrbl_writer_node_t* node, uint64_t* out_value_offset, bc_hrbl_writer_error_t* out_error)
 {
     size_t kind_offset = bc_hrbl_align_up(nodes->size + 1u, 8u) - 1u;
     if (kind_offset > nodes->size) {
         if (!bc_hrbl_encoder_buffer_append_zero(nodes, kind_offset - nodes->size)) {
-            return false;
+            return bc_hrbl_encoder_fail(out_error, BC_HRBL_WRITER_ERROR_OOM);
         }
     }
     uint8_t kind_byte = (uint8_t)BC_HRBL_KIND_BLOCK;
     if (!bc_hrbl_encoder_buffer_append(nodes, &kind_byte, 1u)) {
-        return false;
+        return bc_hrbl_encoder_fail(out_error, BC_HRBL_WRITER_ERROR_OOM);
     }
     if (!bc_hrbl_encoder_buffer_align_to(nodes, 8u)) {
-        return false;
+        return bc_hrbl_encoder_fail(out_error, BC_HRBL_WRITER_ERROR_OOM);
     }
 
     uint32_t child_count = node->child_count;
@@ -650,13 +660,13 @@ static bool bc_hrbl_encoder_emit_block(bc_hrbl_encoder_buffer_t* nodes, bc_hrbl_
     block_header.child_count = child_count;
     block_header.entries_size_bytes = child_count * BC_HRBL_BLOCK_ENTRY_SIZE;
     if (!bc_hrbl_encoder_buffer_append(nodes, &block_header, sizeof(block_header))) {
-        return false;
+        return bc_hrbl_encoder_fail(out_error, BC_HRBL_WRITER_ERROR_OOM);
     }
 
     size_t entries_buffer_offset = nodes->size;
     size_t entries_total_size = (size_t)child_count * BC_HRBL_BLOCK_ENTRY_SIZE;
     if (!bc_hrbl_encoder_buffer_append_zero(nodes, entries_total_size)) {
-        return false;
+        return bc_hrbl_encoder_fail(out_error, BC_HRBL_WRITER_ERROR_OOM);
     }
 
     bc_hrbl_encoder_pending_entry_t* pending = NULL;
@@ -664,7 +674,7 @@ static bool bc_hrbl_encoder_emit_block(bc_hrbl_encoder_buffer_t* nodes, bc_hrbl_
         void* pending_ptr = NULL;
         if (!bc_allocators_pool_allocate(pool->memory_context, (size_t)child_count * sizeof(bc_hrbl_encoder_pending_entry_t),
                                          &pending_ptr)) {
-            return false;
+            return bc_hrbl_encoder_fail(out_error, BC_HRBL_WRITER_ERROR_OOM);
         }
         pending = (bc_hrbl_encoder_pending_entry_t*)pending_ptr;
     }
@@ -683,7 +693,7 @@ static bool bc_hrbl_encoder_emit_block(bc_hrbl_encoder_buffer_t* nodes, bc_hrbl_
         }
         uint32_t key_pool_offset = child->cached_key_pool_offset;
         if (key_pool_offset == BC_HRBL_WRITER_POOL_OFFSET_NONE) {
-            if (!bc_hrbl_encoder_pool_intern_with_hash(pool, key_data, key_length, key_hash, &key_pool_offset)) {
+            if (!bc_hrbl_encoder_pool_intern_with_hash(pool, key_data, key_length, key_hash, &key_pool_offset, out_error)) {
                 if (pending != NULL) {
                     bc_allocators_pool_free(pool->memory_context, pending);
                 }
@@ -691,7 +701,7 @@ static bool bc_hrbl_encoder_emit_block(bc_hrbl_encoder_buffer_t* nodes, bc_hrbl_
             }
         }
         uint64_t child_value_offset = 0u;
-        if (!bc_hrbl_encoder_emit_value(nodes, pool, nodes_base_offset, child, &child_value_offset)) {
+        if (!bc_hrbl_encoder_emit_value(nodes, pool, nodes_base_offset, child, &child_value_offset, out_error)) {
             if (pending != NULL) {
                 bc_allocators_pool_free(pool->memory_context, pending);
             }
@@ -704,7 +714,7 @@ static bool bc_hrbl_encoder_emit_block(bc_hrbl_encoder_buffer_t* nodes, bc_hrbl_
         index += 1u;
     }
 
-    if (!bc_hrbl_encoder_pending_sort(pool->memory_context, pending, child_count, pool->worker_count)) {
+    if (!bc_hrbl_encoder_pending_sort(pool->memory_context, pending, child_count, pool->worker_count, out_error)) {
         if (pending != NULL) {
             bc_allocators_pool_free(pool->memory_context, pending);
         }
@@ -720,7 +730,8 @@ static bool bc_hrbl_encoder_emit_block(bc_hrbl_encoder_buffer_t* nodes, bc_hrbl_
         entry.value_offset = pending[i].value_offset;
         bc_hrbl_store_entry(entries_write + (size_t)i * BC_HRBL_BLOCK_ENTRY_SIZE, &entry);
         uint64_t entry_buffer_offset = (uint64_t)entries_buffer_offset + (uint64_t)i * BC_HRBL_BLOCK_ENTRY_SIZE;
-        if (!bc_hrbl_encoder_pool_record_fixup(pool, entry_buffer_offset + (uint64_t)offsetof(bc_hrbl_entry_t, key_pool_offset))) {
+        if (!bc_hrbl_encoder_pool_record_fixup(pool, entry_buffer_offset + (uint64_t)offsetof(bc_hrbl_entry_t, key_pool_offset),
+                                               out_error)) {
             bc_allocators_pool_free(pool->memory_context, pending);
             return false;
         }
@@ -733,20 +744,20 @@ static bool bc_hrbl_encoder_emit_block(bc_hrbl_encoder_buffer_t* nodes, bc_hrbl_
 }
 
 static bool bc_hrbl_encoder_emit_array(bc_hrbl_encoder_buffer_t* nodes, bc_hrbl_encoder_pool_t* pool, uint64_t nodes_base_offset,
-                                       const bc_hrbl_writer_node_t* node, uint64_t* out_value_offset)
+                                       const bc_hrbl_writer_node_t* node, uint64_t* out_value_offset, bc_hrbl_writer_error_t* out_error)
 {
     size_t kind_offset = bc_hrbl_align_up(nodes->size + 1u, 8u) - 1u;
     if (kind_offset > nodes->size) {
         if (!bc_hrbl_encoder_buffer_append_zero(nodes, kind_offset - nodes->size)) {
-            return false;
+            return bc_hrbl_encoder_fail(out_error, BC_HRBL_WRITER_ERROR_OOM);
         }
     }
     uint8_t kind_byte = (uint8_t)BC_HRBL_KIND_ARRAY;
     if (!bc_hrbl_encoder_buffer_append(nodes, &kind_byte, 1u)) {
-        return false;
+        return bc_hrbl_encoder_fail(out_error, BC_HRBL_WRITER_ERROR_OOM);
     }
     if (!bc_hrbl_encoder_buffer_align_to(nodes, 8u)) {
-        return false;
+        return bc_hrbl_encoder_fail(out_error, BC_HRBL_WRITER_ERROR_OOM);
     }
 
     uint32_t element_count = node->child_count;
@@ -754,19 +765,19 @@ static bool bc_hrbl_encoder_emit_array(bc_hrbl_encoder_buffer_t* nodes, bc_hrbl_
     array_header.element_count = element_count;
     array_header.body_size_bytes = element_count * (uint32_t)BC_HRBL_ARRAY_ELEMENT_SIZE;
     if (!bc_hrbl_encoder_buffer_append(nodes, &array_header, sizeof(array_header))) {
-        return false;
+        return bc_hrbl_encoder_fail(out_error, BC_HRBL_WRITER_ERROR_OOM);
     }
 
     size_t offsets_buffer_offset = nodes->size;
     size_t offsets_total_size = (size_t)element_count * BC_HRBL_ARRAY_ELEMENT_SIZE;
     if (!bc_hrbl_encoder_buffer_append_zero(nodes, offsets_total_size)) {
-        return false;
+        return bc_hrbl_encoder_fail(out_error, BC_HRBL_WRITER_ERROR_OOM);
     }
 
     uint32_t index = 0u;
     for (const bc_hrbl_writer_node_t* element = node->first_child; element != NULL; element = element->next_sibling) {
         uint64_t element_offset = 0u;
-        if (!bc_hrbl_encoder_emit_value(nodes, pool, nodes_base_offset, element, &element_offset)) {
+        if (!bc_hrbl_encoder_emit_value(nodes, pool, nodes_base_offset, element, &element_offset, out_error)) {
             return false;
         }
         uint8_t* base = &nodes->data[offsets_buffer_offset + (size_t)index * BC_HRBL_ARRAY_ELEMENT_SIZE];
@@ -778,7 +789,7 @@ static bool bc_hrbl_encoder_emit_array(bc_hrbl_encoder_buffer_t* nodes, bc_hrbl_
 }
 
 static bool bc_hrbl_encoder_emit_value(bc_hrbl_encoder_buffer_t* nodes, bc_hrbl_encoder_pool_t* pool, uint64_t nodes_base_offset,
-                                       const bc_hrbl_writer_node_t* node, uint64_t* out_value_offset)
+                                       const bc_hrbl_writer_node_t* node, uint64_t* out_value_offset, bc_hrbl_writer_error_t* out_error)
 {
     switch (node->kind) {
     case BC_HRBL_KIND_NULL:
@@ -788,13 +799,13 @@ static bool bc_hrbl_encoder_emit_value(bc_hrbl_encoder_buffer_t* nodes, bc_hrbl_
     case BC_HRBL_KIND_UINT64:
     case BC_HRBL_KIND_FLOAT64:
     case BC_HRBL_KIND_STRING:
-        return bc_hrbl_encoder_emit_scalar(nodes, pool, nodes_base_offset, node, out_value_offset);
+        return bc_hrbl_encoder_emit_scalar(nodes, pool, nodes_base_offset, node, out_value_offset, out_error);
     case BC_HRBL_KIND_BLOCK:
-        return bc_hrbl_encoder_emit_block(nodes, pool, nodes_base_offset, node, out_value_offset);
+        return bc_hrbl_encoder_emit_block(nodes, pool, nodes_base_offset, node, out_value_offset, out_error);
     case BC_HRBL_KIND_ARRAY:
-        return bc_hrbl_encoder_emit_array(nodes, pool, nodes_base_offset, node, out_value_offset);
+        return bc_hrbl_encoder_emit_array(nodes, pool, nodes_base_offset, node, out_value_offset, out_error);
     }
-    return false;
+    return bc_hrbl_encoder_fail(out_error, BC_HRBL_WRITER_ERROR_INTERNAL);
 }
 
 static void bc_hrbl_encoder_apply_fixups(bc_hrbl_encoder_buffer_t* nodes, const bc_hrbl_encoder_pool_t* pool, uint64_t strings_offset)
@@ -809,17 +820,17 @@ static void bc_hrbl_encoder_apply_fixups(bc_hrbl_encoder_buffer_t* nodes, const 
     }
 }
 
-bool bc_hrbl_writer_serialize_to_buffer(bc_hrbl_writer_t* writer, uint8_t** out_buffer, size_t* out_size)
+bool bc_hrbl_writer_serialize_to_buffer(bc_hrbl_writer_t* writer, uint8_t** out_buffer, size_t* out_size, bc_hrbl_writer_error_t* out_error)
 {
     bc_allocators_context_t* memory_context = writer->memory_context;
 
     bc_hrbl_encoder_pool_t pool;
-    if (!bc_hrbl_encoder_pool_init(&pool, memory_context, 4096u)) {
+    if (!bc_hrbl_encoder_pool_init(&pool, memory_context, 4096u, out_error)) {
         return false;
     }
     pool.worker_count = writer->options.worker_count;
     for (bc_hrbl_writer_node_t* root = writer->root_first; root != NULL; root = root->next_sibling) {
-        if (!bc_hrbl_encoder_collect_strings(&pool, root)) {
+        if (!bc_hrbl_encoder_collect_strings(&pool, root, out_error)) {
             bc_hrbl_encoder_pool_destroy(&pool);
             return false;
         }
@@ -828,7 +839,7 @@ bool bc_hrbl_writer_serialize_to_buffer(bc_hrbl_writer_t* writer, uint8_t** out_
     bc_hrbl_encoder_buffer_t nodes_buffer;
     if (!bc_hrbl_encoder_buffer_init(&nodes_buffer, memory_context, 4096u)) {
         bc_hrbl_encoder_pool_destroy(&pool);
-        return false;
+        return bc_hrbl_encoder_fail(out_error, BC_HRBL_WRITER_ERROR_OOM);
     }
 
     uint64_t root_count = writer->root_count;
@@ -842,7 +853,7 @@ bool bc_hrbl_writer_serialize_to_buffer(bc_hrbl_writer_t* writer, uint8_t** out_
         if (!bc_allocators_pool_allocate(memory_context, (size_t)root_count * sizeof(bc_hrbl_encoder_pending_entry_t), &pointer)) {
             bc_hrbl_encoder_buffer_destroy(&nodes_buffer);
             bc_hrbl_encoder_pool_destroy(&pool);
-            return false;
+            return bc_hrbl_encoder_fail(out_error, BC_HRBL_WRITER_ERROR_OOM);
         }
         root_entries = (bc_hrbl_encoder_pending_entry_t*)pointer;
     }
@@ -861,7 +872,7 @@ bool bc_hrbl_writer_serialize_to_buffer(bc_hrbl_writer_t* writer, uint8_t** out_
         }
         uint32_t key_pool_offset = root->cached_key_pool_offset;
         if (key_pool_offset == BC_HRBL_WRITER_POOL_OFFSET_NONE) {
-            if (!bc_hrbl_encoder_pool_intern_with_hash(&pool, key_data, key_length, key_hash, &key_pool_offset)) {
+            if (!bc_hrbl_encoder_pool_intern_with_hash(&pool, key_data, key_length, key_hash, &key_pool_offset, out_error)) {
                 if (root_entries != NULL) {
                     bc_allocators_pool_free(memory_context, root_entries);
                 }
@@ -871,7 +882,7 @@ bool bc_hrbl_writer_serialize_to_buffer(bc_hrbl_writer_t* writer, uint8_t** out_
             }
         }
         uint64_t root_value_offset = 0u;
-        if (!bc_hrbl_encoder_emit_value(&nodes_buffer, &pool, nodes_offset, root, &root_value_offset)) {
+        if (!bc_hrbl_encoder_emit_value(&nodes_buffer, &pool, nodes_offset, root, &root_value_offset, out_error)) {
             if (root_entries != NULL) {
                 bc_allocators_pool_free(memory_context, root_entries);
             }
@@ -886,7 +897,7 @@ bool bc_hrbl_writer_serialize_to_buffer(bc_hrbl_writer_t* writer, uint8_t** out_
         root_index += 1u;
     }
 
-    if (!bc_hrbl_encoder_pending_sort(memory_context, root_entries, root_count, pool.worker_count)) {
+    if (!bc_hrbl_encoder_pending_sort(memory_context, root_entries, root_count, pool.worker_count, out_error)) {
         if (root_entries != NULL) {
             bc_allocators_pool_free(memory_context, root_entries);
         }
@@ -913,7 +924,7 @@ bool bc_hrbl_writer_serialize_to_buffer(bc_hrbl_writer_t* writer, uint8_t** out_
         bc_allocators_pool_free(memory_context, root_entries);
         bc_hrbl_encoder_buffer_destroy(&nodes_buffer);
         bc_hrbl_encoder_pool_destroy(&pool);
-        return false;
+        return bc_hrbl_encoder_fail(out_error, BC_HRBL_WRITER_ERROR_OOM);
     }
     uint8_t* output_data = (uint8_t*)output_pointer;
     (void)bc_core_zero(output_data, (size_t)file_size);

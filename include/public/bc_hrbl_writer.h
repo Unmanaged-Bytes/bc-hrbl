@@ -10,6 +10,19 @@
 #include <stddef.h>
 #include <stdint.h>
 
+typedef enum {
+    BC_HRBL_WRITER_OK = 0,
+    BC_HRBL_WRITER_ERROR_NONE = 0,
+    BC_HRBL_WRITER_ERROR_OOM,
+    BC_HRBL_WRITER_ERROR_UNCLOSED_SCOPE,
+    BC_HRBL_WRITER_ERROR_CONSTRUCTION,
+    BC_HRBL_WRITER_ERROR_STRING_LENGTH_OVERFLOW_4GB,
+    BC_HRBL_WRITER_ERROR_STRING_POOL_OVERFLOW_4GB,
+    BC_HRBL_WRITER_ERROR_FILE_SIZE_OVERFLOW_4GB,
+    BC_HRBL_WRITER_ERROR_INVALID_ARGUMENT,
+    BC_HRBL_WRITER_ERROR_INTERNAL,
+} bc_hrbl_writer_error_t;
+
 typedef struct bc_hrbl_writer_options {
     size_t worker_count;
     bool deduplicate_strings;
@@ -43,5 +56,7 @@ bool bc_hrbl_writer_finalize_to_file(bc_hrbl_writer_t* writer, const char* outpu
 bool bc_hrbl_writer_finalize_to_buffer(bc_hrbl_writer_t* writer, void** out_buffer, size_t* out_size);
 
 void bc_hrbl_writer_free_buffer(bc_allocators_context_t* memory_context, void* buffer);
+
+bc_hrbl_writer_error_t bc_hrbl_writer_last_error(const bc_hrbl_writer_t* writer);
 
 #endif

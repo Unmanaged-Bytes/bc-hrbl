@@ -122,6 +122,7 @@ bool bc_hrbl_writer_create(bc_allocators_context_t* memory_context, const bc_hrb
     bc_hrbl_writer_t* writer = (bc_hrbl_writer_t*)pointer;
     (void)bc_core_zero(writer, sizeof(*writer));
     writer->memory_context = memory_context;
+    writer->last_error = BC_HRBL_WRITER_OK;
     if (!bc_allocators_arena_create_growable(memory_context, (size_t)256 * 1024, 0u, &writer->arena)) {
         bc_allocators_pool_free(memory_context, writer);
         return false;
@@ -391,22 +392,37 @@ bool bc_hrbl_writer_finalize_to_buffer(bc_hrbl_writer_t* writer, void** out_buff
         *out_size = 0u;
     }
     if (writer == NULL || out_buffer == NULL || out_size == NULL) {
+        if (writer != NULL) {
+            writer->last_error = BC_HRBL_WRITER_ERROR_INVALID_ARGUMENT;
+        }
         return false;
     }
     if (writer->error_flag) {
+        writer->last_error = BC_HRBL_WRITER_ERROR_CONSTRUCTION;
         return false;
     }
     if (writer->current_scope != NULL) {
+        writer->last_error = BC_HRBL_WRITER_ERROR_UNCLOSED_SCOPE;
         return false;
     }
     uint8_t* buffer = NULL;
     size_t size = 0u;
-    if (!bc_hrbl_writer_serialize_to_buffer(writer, &buffer, &size)) {
+    bc_hrbl_writer_error_t serialize_error = BC_HRBL_WRITER_OK;
+    if (!bc_hrbl_writer_serialize_to_buffer(writer, &buffer, &size, &serialize_error)) {
+        writer->last_error = (serialize_error != BC_HRBL_WRITER_OK) ? serialize_error : BC_HRBL_WRITER_ERROR_INTERNAL;
         return false;
     }
     *out_buffer = buffer;
     *out_size = size;
     return true;
+}
+
+bc_hrbl_writer_error_t bc_hrbl_writer_last_error(const bc_hrbl_writer_t* writer)
+{
+    if (writer == NULL) {
+        return BC_HRBL_WRITER_ERROR_INVALID_ARGUMENT;
+    }
+    return writer->last_error;
 }
 
 bool bc_hrbl_writer_finalize_to_file(bc_hrbl_writer_t* writer, const char* output_path)
