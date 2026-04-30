@@ -425,6 +425,31 @@ bc_hrbl_writer_error_t bc_hrbl_writer_last_error(const bc_hrbl_writer_t* writer)
     return writer->last_error;
 }
 
+const char* bc_hrbl_writer_error_string(bc_hrbl_writer_error_t code)
+{
+    switch (code) {
+    case BC_HRBL_WRITER_OK:
+        return "ok";
+    case BC_HRBL_WRITER_ERROR_OOM:
+        return "out of memory";
+    case BC_HRBL_WRITER_ERROR_UNCLOSED_SCOPE:
+        return "unclosed block scope at finalize";
+    case BC_HRBL_WRITER_ERROR_CONSTRUCTION:
+        return "writer error flag set during construction";
+    case BC_HRBL_WRITER_ERROR_STRING_LENGTH_OVERFLOW_4GB:
+        return "string length exceeds 4 GiB";
+    case BC_HRBL_WRITER_ERROR_STRING_POOL_OVERFLOW_4GB:
+        return "string pool buffer exceeds 4 GiB";
+    case BC_HRBL_WRITER_ERROR_FILE_SIZE_OVERFLOW_4GB:
+        return "file size exceeds 4 GiB";
+    case BC_HRBL_WRITER_ERROR_INVALID_ARGUMENT:
+        return "invalid argument";
+    case BC_HRBL_WRITER_ERROR_INTERNAL:
+        return "internal error";
+    }
+    return "unknown error";
+}
+
 bool bc_hrbl_writer_finalize_to_file(bc_hrbl_writer_t* writer, const char* output_path)
 {
     if (writer == NULL || output_path == NULL) {

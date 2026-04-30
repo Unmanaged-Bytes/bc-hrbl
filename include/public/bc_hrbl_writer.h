@@ -59,4 +59,6 @@ void bc_hrbl_writer_free_buffer(bc_allocators_context_t* memory_context, void* b
 
 bc_hrbl_writer_error_t bc_hrbl_writer_last_error(const bc_hrbl_writer_t* writer);
 
+const char* bc_hrbl_writer_error_string(bc_hrbl_writer_error_t code);
+
 #endif
