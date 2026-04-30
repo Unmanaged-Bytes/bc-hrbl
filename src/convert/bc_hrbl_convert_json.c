@@ -290,7 +290,7 @@ bool bc_hrbl_convert_json_buffer_to_hrbl(bc_allocators_context_t* memory_context
         return false;
     }
     bc_hrbl_writer_t* writer = NULL;
-    if (!bc_hrbl_writer_create(memory_context, &writer)) {
+    if (!bc_hrbl_writer_create(memory_context, NULL, &writer)) {
         return false;
     }
     bool ok = bc_hrbl_convert_json_to_writer(writer, json_text, text_length, out_error);

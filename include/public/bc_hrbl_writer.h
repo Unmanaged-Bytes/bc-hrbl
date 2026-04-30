@@ -15,10 +15,7 @@ typedef struct bc_hrbl_writer_options {
     bool deduplicate_strings;
 } bc_hrbl_writer_options_t;
 
-bool bc_hrbl_writer_create(bc_allocators_context_t* memory_context, bc_hrbl_writer_t** out_writer);
-
-bool bc_hrbl_writer_create_ex(bc_allocators_context_t* memory_context, const bc_hrbl_writer_options_t* options,
-                              bc_hrbl_writer_t** out_writer);
+bool bc_hrbl_writer_create(bc_allocators_context_t* memory_context, const bc_hrbl_writer_options_t* options, bc_hrbl_writer_t** out_writer);
 
 void bc_hrbl_writer_destroy(bc_hrbl_writer_t* writer);
 
@@ -45,6 +42,6 @@ bool bc_hrbl_writer_append_string(bc_hrbl_writer_t* writer, const char* value, s
 bool bc_hrbl_writer_finalize_to_file(bc_hrbl_writer_t* writer, const char* output_path);
 bool bc_hrbl_writer_finalize_to_buffer(bc_hrbl_writer_t* writer, void** out_buffer, size_t* out_size);
 
-void bc_hrbl_free_buffer(bc_allocators_context_t* memory_context, void* buffer);
+void bc_hrbl_writer_free_buffer(bc_allocators_context_t* memory_context, void* buffer);
 
 #endif

@@ -151,7 +151,7 @@ bool bc_hrbl_reader_open_buffer(bc_allocators_context_t* memory_context, const v
     return bc_hrbl_reader_attach_buffer(memory_context, data, size, NULL, out_reader);
 }
 
-void bc_hrbl_reader_destroy(bc_hrbl_reader_t* reader)
+void bc_hrbl_reader_close(bc_hrbl_reader_t* reader)
 {
     if (reader->mmap_handle != NULL) {
         bc_io_mmap_destroy(reader->mmap_handle);

@@ -40,7 +40,7 @@ int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size)
         return 0;
     }
     bc_hrbl_writer_t* writer = NULL;
-    if (!bc_hrbl_writer_create(memory, &writer)) {
+    if (!bc_hrbl_writer_create(memory, NULL, &writer)) {
         bc_allocators_context_destroy(memory);
         return 0;
     }
@@ -204,7 +204,7 @@ int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size)
     size_t buffer_size = 0u;
     if (bc_hrbl_writer_finalize_to_buffer(writer, &buffer, &buffer_size)) {
         (void)bc_hrbl_verify_buffer(buffer, buffer_size);
-        bc_hrbl_free_buffer(memory, buffer);
+        bc_hrbl_writer_free_buffer(memory, buffer);
     }
     bc_hrbl_writer_destroy(writer);
     bc_allocators_context_destroy(memory);

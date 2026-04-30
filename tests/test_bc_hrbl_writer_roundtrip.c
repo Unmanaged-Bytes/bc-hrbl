@@ -29,7 +29,7 @@ static void test_writer_roundtrip_empty(void** state)
     bc_allocators_context_t* memory = make_memory();
 
     bc_hrbl_writer_t* writer = NULL;
-    assert_true(bc_hrbl_writer_create(memory, &writer));
+    assert_true(bc_hrbl_writer_create(memory, NULL, &writer));
 
     void* buffer = NULL;
     size_t size = 0u;
@@ -45,7 +45,7 @@ static void test_writer_roundtrip_empty(void** state)
     assert_true(bc_hrbl_reader_root_count(reader, &count));
     assert_int_equal((int)count, 0);
 
-    bc_hrbl_reader_destroy(reader);
+    bc_hrbl_reader_close(reader);
     bc_hrbl_writer_destroy(writer);
 
     static char sink_empty[1024];
@@ -60,9 +60,9 @@ static void test_writer_roundtrip_empty(void** state)
     assert_int_equal((int)empty_length, 3);
     assert_memory_equal(empty_data, "{}\n", 3);
     bc_core_writer_destroy(&writer_empty);
-    bc_hrbl_reader_destroy(reader_again);
+    bc_hrbl_reader_close(reader_again);
 
-    bc_hrbl_free_buffer(memory, buffer);
+    bc_hrbl_writer_free_buffer(memory, buffer);
     bc_allocators_context_destroy(memory);
 }
 
@@ -72,7 +72,7 @@ static void test_writer_roundtrip_scalars(void** state)
     bc_allocators_context_t* memory = make_memory();
 
     bc_hrbl_writer_t* writer = NULL;
-    assert_true(bc_hrbl_writer_create(memory, &writer));
+    assert_true(bc_hrbl_writer_create(memory, NULL, &writer));
     assert_true(bc_hrbl_writer_set_int64(writer, "count", 5u, -42));
     assert_true(bc_hrbl_writer_set_bool(writer, "enabled", 7u, true));
     assert_true(bc_hrbl_writer_set_string(writer, "name", 4u, "hello", 5u));
@@ -121,8 +121,8 @@ static void test_writer_roundtrip_scalars(void** state)
     assert_true(bc_hrbl_reader_get_float64(&value, &loaded_float));
     assert_true(loaded_float > 3.13 && loaded_float < 3.15);
 
-    bc_hrbl_reader_destroy(reader);
-    bc_hrbl_free_buffer(memory, buffer);
+    bc_hrbl_reader_close(reader);
+    bc_hrbl_writer_free_buffer(memory, buffer);
     bc_allocators_context_destroy(memory);
 }
 
@@ -132,7 +132,7 @@ static void test_writer_roundtrip_nested(void** state)
     bc_allocators_context_t* memory = make_memory();
 
     bc_hrbl_writer_t* writer = NULL;
-    assert_true(bc_hrbl_writer_create(memory, &writer));
+    assert_true(bc_hrbl_writer_create(memory, NULL, &writer));
 
     assert_true(bc_hrbl_writer_begin_block(writer, "server", 6u));
     assert_true(bc_hrbl_writer_set_string(writer, "host", 4u, "localhost", 9u));
@@ -206,8 +206,8 @@ static void test_writer_roundtrip_nested(void** state)
     assert_memory_equal(full_data, expected, expected_length);
     bc_core_writer_destroy(&writer_full);
 
-    bc_hrbl_reader_destroy(reader);
-    bc_hrbl_free_buffer(memory, buffer);
+    bc_hrbl_reader_close(reader);
+    bc_hrbl_writer_free_buffer(memory, buffer);
     bc_allocators_context_destroy(memory);
 }
 
@@ -217,7 +217,7 @@ static void test_writer_roundtrip_quoted_path_segments(void** state)
     bc_allocators_context_t* memory = make_memory();
 
     bc_hrbl_writer_t* writer = NULL;
-    assert_true(bc_hrbl_writer_create(memory, &writer));
+    assert_true(bc_hrbl_writer_create(memory, NULL, &writer));
 
     assert_true(bc_hrbl_writer_begin_block(writer, "files", 5u));
     assert_true(bc_hrbl_writer_set_int64(writer, "a.txt", 5u, 11));
@@ -252,8 +252,8 @@ static void test_writer_roundtrip_quoted_path_segments(void** state)
     assert_false(bc_hrbl_reader_find(reader, "files.'unterminated", 19u, &value));
     assert_false(bc_hrbl_reader_find(reader, "files.''", 8u, &value));
 
-    bc_hrbl_reader_destroy(reader);
-    bc_hrbl_free_buffer(memory, buffer);
+    bc_hrbl_reader_close(reader);
+    bc_hrbl_writer_free_buffer(memory, buffer);
     bc_allocators_context_destroy(memory);
 }
 

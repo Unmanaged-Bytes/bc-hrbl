@@ -58,7 +58,7 @@ static char* bench_build_json_payload(size_t entries, size_t* out_size)
 static void* bench_build_hrbl_with_many_int64(bc_allocators_context_t* memory, size_t entries, size_t* out_hrbl_size)
 {
     bc_hrbl_writer_t* writer = NULL;
-    if (!bc_hrbl_writer_create(memory, &writer)) {
+    if (!bc_hrbl_writer_create(memory, NULL, &writer)) {
         fputs("fatal: writer create failed\n", stderr);
         exit(1);
     }
@@ -94,7 +94,7 @@ static void bench_writer(size_t entries)
     const int iterations = 5;
     for (int iter = 0; iter < iterations; iter += 1) {
         bc_hrbl_writer_t* writer = NULL;
-        (void)bc_hrbl_writer_create(memory, &writer);
+        (void)bc_hrbl_writer_create(memory, NULL, &writer);
         char key_buffer[32];
         uint64_t start = bench_now_ns();
         for (size_t i = 0u; i < entries; i += 1u) {
@@ -109,7 +109,7 @@ static void bench_writer(size_t entries)
             best_ns = elapsed;
         }
         output_size = size;
-        bc_hrbl_free_buffer(memory, buffer);
+        bc_hrbl_writer_free_buffer(memory, buffer);
         bc_hrbl_writer_destroy(writer);
     }
     double seconds = (double)best_ns / 1e9;
@@ -162,8 +162,8 @@ static void bench_reader_scan(size_t entries)
     double mb = (double)hrbl_size / (1024.0 * 1024.0);
     printf("reader_scan    : entries=%zu  size=%zu B (%.2f MiB)  best=%.3f ms  %.2f MB/s   (sink=%" PRId64 ", visited=%" PRIu64 ")\n",
            entries, hrbl_size, mb, seconds * 1000.0, mb / seconds, (int64_t)sink, visited);
-    bc_hrbl_reader_destroy(reader);
-    bc_hrbl_free_buffer(memory, hrbl_buffer);
+    bc_hrbl_reader_close(reader);
+    bc_hrbl_writer_free_buffer(memory, hrbl_buffer);
     bc_allocators_context_destroy(memory);
 }
 
@@ -205,8 +205,8 @@ static void bench_query_latency(size_t entries)
     double ns_per_op = (double)best_total / (double)total_ops;
     printf("query_latency  : entries=%zu  lookups=%" PRIu64 "  median_ns=%.1f   (sink=%" PRId64 ")\n", entries, total_ops, ns_per_op,
            (int64_t)sink);
-    bc_hrbl_reader_destroy(reader);
-    bc_hrbl_free_buffer(memory, hrbl_buffer);
+    bc_hrbl_reader_close(reader);
+    bc_hrbl_writer_free_buffer(memory, hrbl_buffer);
     bc_allocators_context_destroy(memory);
 }
 
@@ -230,7 +230,7 @@ static void bench_convert_json(size_t entries)
             best_ns = elapsed;
         }
         output_size = size;
-        bc_hrbl_free_buffer(memory, buffer);
+        bc_hrbl_writer_free_buffer(memory, buffer);
     }
     double seconds = (double)best_ns / 1e9;
     double json_mb = (double)json_size / (1024.0 * 1024.0);
@@ -279,8 +279,8 @@ static void bench_export_json(size_t entries)
     double mb = (double)output_size / (1024.0 * 1024.0);
     printf("hrbl_to_json   : hrbl=%zu B  json=%zu B (%.2f MiB)  best=%.3f ms  %.2f MB/s\n", hrbl_size, output_size, mb, seconds * 1000.0,
            mb / seconds);
-    bc_hrbl_reader_destroy(reader);
-    bc_hrbl_free_buffer(memory, hrbl_buffer);
+    bc_hrbl_reader_close(reader);
+    bc_hrbl_writer_free_buffer(memory, hrbl_buffer);
     bc_allocators_context_destroy(memory);
 }
 

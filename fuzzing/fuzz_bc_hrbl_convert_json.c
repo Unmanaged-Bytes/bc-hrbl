@@ -23,7 +23,7 @@ int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size)
     size_t out_size = 0u;
     bc_hrbl_convert_error_t error;
     if (bc_hrbl_convert_json_buffer_to_hrbl(memory, (const char*)data, size, &buffer, &out_size, &error)) {
-        bc_hrbl_free_buffer(memory, buffer);
+        bc_hrbl_writer_free_buffer(memory, buffer);
     }
     bc_allocators_context_destroy(memory);
     return 0;
