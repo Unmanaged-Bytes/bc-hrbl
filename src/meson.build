@@ -1,4 +1,5 @@
 bc_hrbl_sources = [
+    'hash/bc_hrbl_hash.c',
     'reader/bc_hrbl_reader.c',
     'writer/bc_hrbl_writer.c',
     'writer/bc_hrbl_writer_encoder.c',

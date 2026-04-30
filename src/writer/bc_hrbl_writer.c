@@ -3,6 +3,7 @@
 #include "bc_hrbl_writer.h"
 #include "bc_hrbl_writer_internal.h"
 #include "bc_hrbl_format_internal.h"
+#include "bc_hrbl_hash.h"
 
 #include "bc_allocators.h"
 #include "bc_allocators_arena.h"
@@ -16,8 +17,6 @@
 #include <stddef.h>
 #include <sys/stat.h>
 #include <unistd.h>
-
-#include <xxhash.h>
 
 static bool bc_hrbl_writer_arena_clone(bc_hrbl_writer_t* writer, const void* data, size_t length, void** out)
 {
@@ -62,7 +61,7 @@ static bool bc_hrbl_writer_set_key(bc_hrbl_writer_t* writer, bc_hrbl_writer_node
     }
     node->key_data = (const char*)clone;
     node->key_length = (uint32_t)key_length;
-    node->key_hash64 = (uint64_t)XXH3_64bits(key, key_length);
+    node->key_hash64 = bc_hrbl_hash64(key, key_length);
     return true;
 }
 
