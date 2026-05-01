@@ -814,9 +814,9 @@ static void bc_hrbl_encoder_apply_fixups(bc_hrbl_encoder_buffer_t* nodes, const 
     for (size_t i = 0u; i < pool->fixup_count; i += 1u) {
         uint8_t* pointer = &nodes->data[pool->fixup_offsets[i]];
         uint32_t value;
-        __builtin_memcpy(&value, pointer, sizeof(value));
+        bc_core_memcpy(&value, pointer, sizeof(value));
         value += delta;
-        __builtin_memcpy(pointer, &value, sizeof(value));
+        bc_core_memcpy(pointer, &value, sizeof(value));
     }
 }
 
@@ -946,7 +946,7 @@ bool bc_hrbl_writer_serialize_to_buffer(bc_hrbl_writer_t* writer, uint8_t** out_
     header.strings_count = (uint64_t)pool.entries_count;
     header.footer_offset = footer_offset;
     header.checksum_xxh3_64 = 0u;
-    __builtin_memcpy(&output_data[0], &header, sizeof(header));
+    bc_core_memcpy(&output_data[0], &header, sizeof(header));
 
     for (uint64_t i = 0u; i < root_count; i += 1u) {
         bc_hrbl_entry_t entry;
@@ -974,7 +974,7 @@ bool bc_hrbl_writer_serialize_to_buffer(bc_hrbl_writer_t* writer, uint8_t** out_
     footer.checksum_xxh3_64 = checksum;
     footer.file_size = file_size;
     footer.magic_end = BC_HRBL_MAGIC;
-    __builtin_memcpy(&output_data[footer_offset], &footer, sizeof(footer));
+    bc_core_memcpy(&output_data[footer_offset], &footer, sizeof(footer));
 
     bc_allocators_pool_free(memory_context, root_entries);
     bc_hrbl_encoder_buffer_destroy(&nodes_buffer);

@@ -5,6 +5,8 @@
 
 #include "bc_hrbl_types.h"
 
+#include "bc_core.h"
+
 #include <assert.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -162,7 +164,7 @@ static inline size_t bc_hrbl_body_offset_from_kind(size_t kind_offset, bc_hrbl_k
 /*
  * Inline fixed-size loaders/stores for typed format structs. Offsets are
  * guaranteed 8-byte aligned by the format contract (header@0, root index
- * @128, entries aligned to 8/24B, arrays 8B). __builtin_memcpy with a
+ * @128, entries aligned to 8/24B, arrays 8B). bc_core_memcpy with a
  * compile-time size lets the compiler lower to inline loads/stores (3x
  * mov for a 24B entry, 1x mov for a u64). bc_core_copy is for generic
  * runtime-length byte copies; calling the AVX2 dispatch on 8-24 bytes
@@ -171,67 +173,67 @@ static inline size_t bc_hrbl_body_offset_from_kind(size_t kind_offset, bc_hrbl_k
 
 static inline void bc_hrbl_load_entry(bc_hrbl_entry_t* out, const void* src)
 {
-    __builtin_memcpy(out, src, sizeof(*out));
+    bc_core_memcpy(out, src, sizeof(*out));
 }
 
 static inline void bc_hrbl_store_entry(void* dst, const bc_hrbl_entry_t* src)
 {
-    __builtin_memcpy(dst, src, sizeof(*src));
+    bc_core_memcpy(dst, src, sizeof(*src));
 }
 
 static inline void bc_hrbl_load_block_header(bc_hrbl_block_header_t* out, const void* src)
 {
-    __builtin_memcpy(out, src, sizeof(*out));
+    bc_core_memcpy(out, src, sizeof(*out));
 }
 
 static inline void bc_hrbl_load_array_header(bc_hrbl_array_header_t* out, const void* src)
 {
-    __builtin_memcpy(out, src, sizeof(*out));
+    bc_core_memcpy(out, src, sizeof(*out));
 }
 
 static inline void bc_hrbl_load_string_ref(bc_hrbl_string_ref_t* out, const void* src)
 {
-    __builtin_memcpy(out, src, sizeof(*out));
+    bc_core_memcpy(out, src, sizeof(*out));
 }
 
 static inline void bc_hrbl_store_string_ref(void* dst, const bc_hrbl_string_ref_t* src)
 {
-    __builtin_memcpy(dst, src, sizeof(*src));
+    bc_core_memcpy(dst, src, sizeof(*src));
 }
 
 static inline void bc_hrbl_load_u64(uint64_t* out, const void* src)
 {
-    __builtin_memcpy(out, src, sizeof(*out));
+    bc_core_memcpy(out, src, sizeof(*out));
 }
 
 static inline void bc_hrbl_store_u64(void* dst, uint64_t value)
 {
-    __builtin_memcpy(dst, &value, sizeof(value));
+    bc_core_memcpy(dst, &value, sizeof(value));
 }
 
 static inline void bc_hrbl_load_i64(int64_t* out, const void* src)
 {
-    __builtin_memcpy(out, src, sizeof(*out));
+    bc_core_memcpy(out, src, sizeof(*out));
 }
 
 static inline void bc_hrbl_load_f64(double* out, const void* src)
 {
-    __builtin_memcpy(out, src, sizeof(*out));
+    bc_core_memcpy(out, src, sizeof(*out));
 }
 
 static inline void bc_hrbl_load_u32(uint32_t* out, const void* src)
 {
-    __builtin_memcpy(out, src, sizeof(*out));
+    bc_core_memcpy(out, src, sizeof(*out));
 }
 
 static inline void bc_hrbl_load_header(bc_hrbl_header_t* out, const void* src)
 {
-    __builtin_memcpy(out, src, sizeof(*out));
+    bc_core_memcpy(out, src, sizeof(*out));
 }
 
 static inline void bc_hrbl_load_footer(bc_hrbl_footer_t* out, const void* src)
 {
-    __builtin_memcpy(out, src, sizeof(*out));
+    bc_core_memcpy(out, src, sizeof(*out));
 }
 
 #endif

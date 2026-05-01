@@ -337,7 +337,7 @@ bool bc_hrbl_reader_block_body_offsets(const bc_hrbl_reader_t* reader, uint64_t 
     if (body_offset + sizeof(bc_hrbl_block_header_t) > reader->size) {
         return false;
     }
-    __builtin_memcpy(out_header, &reader->base[body_offset], sizeof(*out_header));
+    bc_core_memcpy(out_header, &reader->base[body_offset], sizeof(*out_header));
     *out_entries_offset = body_offset + sizeof(bc_hrbl_block_header_t);
     if (*out_entries_offset + (uint64_t)out_header->child_count * BC_HRBL_BLOCK_ENTRY_SIZE > reader->size) {
         return false;
@@ -416,7 +416,7 @@ bool bc_hrbl_reader_array_body_offsets(const bc_hrbl_reader_t* reader, uint64_t 
     if (body_offset + sizeof(bc_hrbl_array_header_t) > reader->size) {
         return false;
     }
-    __builtin_memcpy(out_header, &reader->base[body_offset], sizeof(*out_header));
+    bc_core_memcpy(out_header, &reader->base[body_offset], sizeof(*out_header));
     *out_elements_offset = body_offset + sizeof(bc_hrbl_array_header_t);
     if (*out_elements_offset + (uint64_t)out_header->element_count * BC_HRBL_ARRAY_ELEMENT_SIZE > reader->size) {
         return false;
@@ -478,7 +478,7 @@ bool bc_hrbl_reader_scalar_int64_at(const bc_hrbl_reader_t* reader, uint64_t val
     if (!bc_hrbl_reader_scalar_body(reader, value_offset, BC_HRBL_KIND_INT64, &body_offset)) {
         return false;
     }
-    __builtin_memcpy(out_value, &reader->base[body_offset], sizeof(*out_value));
+    bc_core_memcpy(out_value, &reader->base[body_offset], sizeof(*out_value));
     return true;
 }
 
@@ -488,7 +488,7 @@ bool bc_hrbl_reader_scalar_uint64_at(const bc_hrbl_reader_t* reader, uint64_t va
     if (!bc_hrbl_reader_scalar_body(reader, value_offset, BC_HRBL_KIND_UINT64, &body_offset)) {
         return false;
     }
-    __builtin_memcpy(out_value, &reader->base[body_offset], sizeof(*out_value));
+    bc_core_memcpy(out_value, &reader->base[body_offset], sizeof(*out_value));
     return true;
 }
 
@@ -498,7 +498,7 @@ bool bc_hrbl_reader_scalar_float64_at(const bc_hrbl_reader_t* reader, uint64_t v
     if (!bc_hrbl_reader_scalar_body(reader, value_offset, BC_HRBL_KIND_FLOAT64, &body_offset)) {
         return false;
     }
-    __builtin_memcpy(out_value, &reader->base[body_offset], sizeof(*out_value));
+    bc_core_memcpy(out_value, &reader->base[body_offset], sizeof(*out_value));
     return true;
 }
 
