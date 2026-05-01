@@ -410,9 +410,6 @@ bool bc_hrbl_export_ini(const bc_hrbl_reader_t* reader, bc_core_writer_t* writer
 
 bool bc_hrbl_export_ini_ex(const bc_hrbl_reader_t* reader, bc_core_writer_t* writer, const bc_hrbl_export_options_t* options)
 {
-    if (reader == NULL || writer == NULL) {
-        return false;
-    }
     bc_hrbl_ini_state_t state;
     state.writer = writer;
     state.reader = reader;

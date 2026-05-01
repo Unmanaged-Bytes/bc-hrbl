@@ -107,12 +107,6 @@ static bool bc_hrbl_writer_expect_indexed_scope(const bc_hrbl_writer_t* writer)
 
 bool bc_hrbl_writer_create(bc_allocators_context_t* memory_context, const bc_hrbl_writer_options_t* options, bc_hrbl_writer_t** out_writer)
 {
-    if (memory_context == NULL || out_writer == NULL) {
-        if (out_writer != NULL) {
-            *out_writer = NULL;
-        }
-        return false;
-    }
     *out_writer = NULL;
     void* pointer = NULL;
     if (!bc_allocators_pool_allocate(memory_context, sizeof(bc_hrbl_writer_t), &pointer)) {
@@ -147,10 +141,7 @@ void bc_hrbl_writer_destroy(bc_hrbl_writer_t* writer)
 
 static bool bc_hrbl_writer_add_leaf(bc_hrbl_writer_t* writer, const char* key, size_t key_length, bc_hrbl_kind_t kind, bool require_key)
 {
-    if (writer == NULL || writer->error_flag) {
-        if (writer != NULL) {
-            writer->error_flag = true;
-        }
+    if (writer->error_flag) {
         return false;
     }
     if (require_key) {
@@ -305,10 +296,7 @@ bool bc_hrbl_writer_append_string(bc_hrbl_writer_t* writer, const char* value, s
 
 static bool bc_hrbl_writer_begin_container(bc_hrbl_writer_t* writer, const char* key, size_t key_length, bc_hrbl_kind_t kind)
 {
-    if (writer == NULL || writer->error_flag) {
-        if (writer != NULL) {
-            writer->error_flag = true;
-        }
+    if (writer->error_flag) {
         return false;
     }
     bool at_root = writer->current_scope == NULL;
@@ -343,10 +331,7 @@ static bool bc_hrbl_writer_begin_container(bc_hrbl_writer_t* writer, const char*
 
 static bool bc_hrbl_writer_end_container(bc_hrbl_writer_t* writer, bc_hrbl_kind_t expected_kind)
 {
-    if (writer == NULL || writer->error_flag) {
-        if (writer != NULL) {
-            writer->error_flag = true;
-        }
+    if (writer->error_flag) {
         return false;
     }
     if (writer->current_scope == NULL) {
@@ -383,18 +368,8 @@ bool bc_hrbl_writer_end_array(bc_hrbl_writer_t* writer)
 
 bool bc_hrbl_writer_finalize_to_buffer(bc_hrbl_writer_t* writer, void** out_buffer, size_t* out_size)
 {
-    if (out_buffer != NULL) {
-        *out_buffer = NULL;
-    }
-    if (out_size != NULL) {
-        *out_size = 0u;
-    }
-    if (writer == NULL || out_buffer == NULL || out_size == NULL) {
-        if (writer != NULL) {
-            writer->last_error = BC_HRBL_WRITER_ERROR_INVALID_ARGUMENT;
-        }
-        return false;
-    }
+    *out_buffer = NULL;
+    *out_size = 0u;
     if (writer->error_flag) {
         writer->last_error = BC_HRBL_WRITER_ERROR_CONSTRUCTION;
         return false;
@@ -417,9 +392,6 @@ bool bc_hrbl_writer_finalize_to_buffer(bc_hrbl_writer_t* writer, void** out_buff
 
 bc_hrbl_writer_error_t bc_hrbl_writer_last_error(const bc_hrbl_writer_t* writer)
 {
-    if (writer == NULL) {
-        return BC_HRBL_WRITER_ERROR_INVALID_ARGUMENT;
-    }
     return writer->last_error;
 }
 
@@ -450,9 +422,6 @@ const char* bc_hrbl_writer_error_string(bc_hrbl_writer_error_t code)
 
 bool bc_hrbl_writer_finalize_to_file(bc_hrbl_writer_t* writer, const char* output_path)
 {
-    if (writer == NULL || output_path == NULL) {
-        return false;
-    }
     void* buffer = NULL;
     size_t size = 0u;
     if (!bc_hrbl_writer_finalize_to_buffer(writer, &buffer, &size)) {

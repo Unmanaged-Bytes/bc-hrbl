@@ -184,9 +184,6 @@ static bc_hrbl_verify_status_t bc_hrbl_verify_root_index(const uint8_t* data, co
 
 bc_hrbl_verify_status_t bc_hrbl_verify_buffer(const void* data, size_t size)
 {
-    if (data == NULL) {
-        return BC_HRBL_VERIFY_ERR_TOO_SMALL;
-    }
     if (size < BC_HRBL_HEADER_SIZE + BC_HRBL_FOOTER_SIZE) {
         return BC_HRBL_VERIFY_ERR_TOO_SMALL;
     }
@@ -227,10 +224,6 @@ bc_hrbl_verify_status_t bc_hrbl_verify_buffer(const void* data, size_t size)
 
 bc_hrbl_verify_status_t bc_hrbl_verify_file(const char* path)
 {
-    if (path == NULL) {
-        return BC_HRBL_VERIFY_ERR_IO;
-    }
-
     bc_allocators_context_config_t memory_config;
     bc_core_zero(&memory_config, sizeof(memory_config));
     memory_config.max_pool_memory = 0u;

@@ -140,13 +140,7 @@ bool bc_hrbl_reader_open(bc_allocators_context_t* memory_context, const char* pa
 
 bool bc_hrbl_reader_open_buffer(bc_allocators_context_t* memory_context, const void* data, size_t size, bc_hrbl_reader_t** out_reader)
 {
-    if (out_reader == NULL) {
-        return false;
-    }
     *out_reader = NULL;
-    if (data == NULL) {
-        return false;
-    }
     return bc_hrbl_reader_attach_buffer(memory_context, data, size, NULL, out_reader);
 }
 
@@ -160,12 +154,6 @@ void bc_hrbl_reader_close(bc_hrbl_reader_t* reader)
 
 bool bc_hrbl_reader_root_count(const bc_hrbl_reader_t* reader, uint64_t* out_count)
 {
-    if (reader == NULL || out_count == NULL) {
-        if (out_count != NULL) {
-            *out_count = 0u;
-        }
-        return false;
-    }
     *out_count = reader->header->root_count;
     return true;
 }
@@ -538,9 +526,6 @@ bool bc_hrbl_reader_scalar_string_at(const bc_hrbl_reader_t* reader, uint64_t va
 
 bool bc_hrbl_reader_resolve_path(const bc_hrbl_reader_t* reader, const char* path, size_t path_length, uint64_t* out_value_offset)
 {
-    if (reader == NULL || path == NULL || out_value_offset == NULL) {
-        return false;
-    }
     if (path_length == 0u) {
         return false;
     }

@@ -529,10 +529,6 @@ bool bc_hrbl_export_json(const bc_hrbl_reader_t* reader, bc_core_writer_t* write
 
 bool bc_hrbl_export_json_ex(const bc_hrbl_reader_t* reader, bc_core_writer_t* writer, const bc_hrbl_export_options_t* options)
 {
-    if (reader == NULL || writer == NULL) {
-        return false;
-    }
-
     bc_hrbl_export_state_t state;
     state.writer = writer;
     state.reader = reader;
