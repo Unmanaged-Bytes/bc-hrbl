@@ -191,7 +191,7 @@ static bool bc_hrbl_reader_key_equals(const bc_hrbl_reader_t* reader, const bc_h
     if (pool_offset + key_length > reader->size) {
         return false;
     }
-    return __builtin_memcmp(&reader->base[pool_offset], key_data, key_length) == 0;
+    return bc_core_memcmp(&reader->base[pool_offset], key_data, key_length) == 0;
 }
 
 static bool bc_hrbl_reader_linear_probe_range(const bc_hrbl_reader_t* reader, uint64_t entries_start, uint64_t entry_count, uint64_t index,

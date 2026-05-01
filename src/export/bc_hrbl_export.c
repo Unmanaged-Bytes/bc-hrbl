@@ -320,7 +320,7 @@ static bool bc_hrbl_export_sort_less_by_key(const void* left, const void* right,
     size_t a_length = (size_t)a->key_length;
     size_t b_length = (size_t)b->key_length;
     size_t min_length = a_length < b_length ? a_length : b_length;
-    int cmp = __builtin_memcmp(a_data, b_data, min_length);
+    int cmp = bc_core_memcmp(a_data, b_data, min_length);
     if (cmp != 0) {
         return cmp < 0;
     }
