@@ -65,7 +65,7 @@ static bool bc_hrbl_writer_set_key(bc_hrbl_writer_t* writer, bc_hrbl_writer_node
     return true;
 }
 
-static bool bc_hrbl_writer_append_to_scope(bc_hrbl_writer_t* writer, bc_hrbl_writer_node_t* node)
+static void bc_hrbl_writer_append_to_scope(bc_hrbl_writer_t* writer, bc_hrbl_writer_node_t* node)
 {
     if (writer->current_scope == NULL) {
         node->parent = NULL;
@@ -76,7 +76,7 @@ static bool bc_hrbl_writer_append_to_scope(bc_hrbl_writer_t* writer, bc_hrbl_wri
         }
         writer->root_last = node;
         writer->root_count += 1u;
-        return true;
+        return;
     }
     bc_hrbl_writer_node_t* scope = writer->current_scope;
     node->parent = scope;
@@ -87,7 +87,6 @@ static bool bc_hrbl_writer_append_to_scope(bc_hrbl_writer_t* writer, bc_hrbl_wri
     }
     scope->last_child = node;
     scope->child_count += 1u;
-    return true;
 }
 
 static bool bc_hrbl_writer_expect_keyed_scope(const bc_hrbl_writer_t* writer)
@@ -176,7 +175,8 @@ static bool bc_hrbl_writer_add_leaf(bc_hrbl_writer_t* writer, const char* key, s
             return false;
         }
     }
-    return bc_hrbl_writer_append_to_scope(writer, node);
+    bc_hrbl_writer_append_to_scope(writer, node);
+    return true;
 }
 
 bool bc_hrbl_writer_set_null(bc_hrbl_writer_t* writer, const char* key, size_t key_length)
@@ -336,9 +336,7 @@ static bool bc_hrbl_writer_begin_container(bc_hrbl_writer_t* writer, const char*
             return false;
         }
     }
-    if (!bc_hrbl_writer_append_to_scope(writer, node)) {
-        return false;
-    }
+    bc_hrbl_writer_append_to_scope(writer, node);
     writer->current_scope = node;
     return true;
 }
