@@ -5,6 +5,8 @@
 ![Language: C11](https://img.shields.io/badge/language-C11-informational)
 ![Platform: Linux](https://img.shields.io/badge/platform-Linux-lightgrey)
 
+Human-readable binary serialization for the `bc-*` ecosystem: convert, export, and verify between binary buffers and JSON / YAML / INI formats.
+
 > **Scope.** Personal project, part of the `bc-*` ecosystem used by
 > [`bc-hash`](https://github.com/Unmanaged-Bytes/bc-hash) and sibling
 > libraries. Published here for transparency and reuse, not as a
