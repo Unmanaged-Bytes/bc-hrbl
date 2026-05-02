@@ -53,3 +53,38 @@ test_bc_hrbl_writer_errors = executable('test_bc_hrbl_writer_errors',
     dependencies : [cmocka_dep, bc_hrbl_dep],
 )
 test('bc_hrbl_writer_errors', test_bc_hrbl_writer_errors)
+
+test_bc_hrbl_writer_validation = executable('test_bc_hrbl_writer_validation',
+    'test_bc_hrbl_writer_validation.c',
+    dependencies : [cmocka_dep, bc_hrbl_dep],
+)
+test('bc_hrbl_writer_validation', test_bc_hrbl_writer_validation)
+
+test_bc_hrbl_writer_kinds = executable('test_bc_hrbl_writer_kinds',
+    'test_bc_hrbl_writer_kinds.c',
+    dependencies : [cmocka_dep, bc_hrbl_dep],
+)
+test('bc_hrbl_writer_kinds', test_bc_hrbl_writer_kinds)
+
+test_bc_hrbl_writer_encoding_paths = executable('test_bc_hrbl_writer_encoding_paths',
+    'test_bc_hrbl_writer_encoding_paths.c',
+    dependencies : [cmocka_dep, bc_hrbl_dep],
+)
+test('bc_hrbl_writer_encoding_paths', test_bc_hrbl_writer_encoding_paths)
+
+test_bc_hrbl_writer_finalize = executable('test_bc_hrbl_writer_finalize',
+    'test_bc_hrbl_writer_finalize.c',
+    dependencies : [cmocka_dep, bc_hrbl_dep],
+)
+test('bc_hrbl_writer_finalize', test_bc_hrbl_writer_finalize)
+
+test_bc_hrbl_writer_oom = executable('test_bc_hrbl_writer_oom',
+    'test_bc_hrbl_writer_oom.c',
+    dependencies : [cmocka_dep, bc_hrbl_dep],
+    link_args : [
+        '-Wl,--wrap=bc_allocators_pool_allocate',
+        '-Wl,--wrap=bc_allocators_pool_reallocate',
+        '-Wl,--wrap=bc_allocators_arena_allocate',
+    ],
+)
+test('bc_hrbl_writer_oom', test_bc_hrbl_writer_oom)
